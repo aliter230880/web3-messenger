@@ -13,6 +13,7 @@
       <div class="sidebar-item active">
         <span>💬</span>
         <span>Чаты</span>
+        <span class="sidebar-badge">147</span>
       </div>
       <div class="sidebar-item">
         <span>👤</span>
@@ -21,10 +22,12 @@
       <div class="sidebar-item">
         <span>📰</span>
         <span>Новости</span>
+        <span class="sidebar-badge">11</span>
       </div>
       <div class="sidebar-item">
         <span>💼</span>
         <span>Работа</span>
+        <span class="sidebar-badge">38</span>
       </div>
       <div class="sidebar-item" style="margin-top: auto;">
         <span>💰</span>
@@ -39,47 +42,44 @@
           <span>🔍</span>
           <input type="text" placeholder="Search">
         </div>
+        <div class="chat-tabs">
+          <div class="chat-tab active">Все</div>
+          <div class="chat-tab">Личное</div>
+          <div class="chat-tab">Непрочитанные</div>
+        </div>
       </div>
       
       <div class="chat-list">
-        <div class="chat-item active">
-          <div class="chat-avatar">👤</div>
-          <div class="chat-info">
-            <div class="chat-name">Дима</div>
-            <div class="chat-preview">Привет! Как проект?</div>
-          </div>
-        </div>
-        
-        <div class="chat-item">
-          <div class="chat-avatar">🤖</div>
-          <div class="chat-info">
-            <div class="chat-name">AI Assistant</div>
-            <div class="chat-preview">Готов помочь с кодом</div>
-          </div>
-        </div>
-        
-        <div class="chat-item">
-          <div class="chat-avatar">📢</div>
-          <div class="chat-info">
-            <div class="chat-name">Crypto News</div>
-            <div class="chat-preview">Bitcoin пробил $100k!</div>
-          </div>
-        </div>
+        <!-- Chats will be rendered here by JavaScript -->
       </div>
     </div>
 
     <!-- Main Chat Area -->
     <main class="chat-area">
-      <div class="messages-container">
-        <p style="text-align: center; color: var(--text-secondary); padding: 40px;">
-          🚀 Web3 Messenger<br>
-          <small>Прототип. Web3 интеграция в разработке...</small>
-        </p>
+      <div class="chat-top-bar">
+        <div class="chat-top-avatar">👤</div>
+        <div class="chat-top-info">
+          <div class="chat-top-name">Выберите чат</div>
+          <div class="chat-top-status">—</div>
+        </div>
+        <div class="encryption-badge">🔐 E2E</div>
       </div>
-      
+
+      <div class="messages-container">
+        <div class="empty-state">
+          <div class="empty-state-icon">💬</div>
+          <h3>Добро пожаловать в Web3 Messenger</h3>
+          <p>Выберите чат слева, чтобы начать общение</p>
+        </div>
+      </div>
+
       <div class="input-container">
-        <input type="text" placeholder="Написать сообщение...">
-        <button class="send-btn">➤</button>
+        <button class="icon-btn">📎</button>
+        <div class="input-wrapper">
+          <input type="text" placeholder="Написать сообщение..." disabled>
+          <button class="icon-btn">😊</button>
+        </div>
+        <button class="send-btn" disabled>➤</button>
       </div>
     </main>
   </div>
