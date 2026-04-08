@@ -1,1 +1,20 @@
-
+{
+  "name": "web3-messenger-contracts",
+  "version": "0.1.0",
+  "description": "Upgradeable smart contracts for Web3 Messenger",
+  "author": "Dima",
+  "license": "MIT",
+  "scripts": {
+    "compile": "npx hardhat compile",
+    "test": "npx hardhat test",
+    "deploy:amoy": "npx hardhat run scripts/deploy.js --network amoy",
+    "deploy:polygon": "npx hardhat run scripts/deploy.js --network polygon",
+    "verify": "npx hardhat verify"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@openzeppelin/contracts-upgradeable": "^5.0.0",
+    "hardhat": "^2.19.0",
+    "dotenv": "^16.3.1"
+  }
+}
