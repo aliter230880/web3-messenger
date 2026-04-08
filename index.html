@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web3 Messenger</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Left Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-item active">
+        <span>💬</span>
+        <span>Чаты</span>
+      </div>
+      <div class="sidebar-item">
+        <span>👤</span>
+        <span>Личное</span>
+      </div>
+      <div class="sidebar-item">
+        <span>📰</span>
+        <span>Новости</span>
+      </div>
+      <div class="sidebar-item">
+        <span>💼</span>
+        <span>Работа</span>
+      </div>
+      <div class="sidebar-item" style="margin-top: auto;">
+        <span>💰</span>
+        <span>Wallet</span>
+      </div>
+    </aside>
+
+    <!-- Chat List Panel -->
+    <div class="chat-panel">
+      <div class="chat-header">
+        <div class="search-box">
+          <span>🔍</span>
+          <input type="text" placeholder="Search">
+        </div>
+      </div>
+      
+      <div class="chat-list">
+        <div class="chat-item active">
+          <div class="chat-avatar">👤</div>
+          <div class="chat-info">
+            <div class="chat-name">Дима</div>
+            <div class="chat-preview">Привет! Как проект?</div>
+          </div>
+        </div>
+        
+        <div class="chat-item">
+          <div class="chat-avatar">🤖</div>
+          <div class="chat-info">
+            <div class="chat-name">AI Assistant</div>
+            <div class="chat-preview">Готов помочь с кодом</div>
+          </div>
+        </div>
+        
+        <div class="chat-item">
+          <div class="chat-avatar">📢</div>
+          <div class="chat-info">
+            <div class="chat-name">Crypto News</div>
+            <div class="chat-preview">Bitcoin пробил $100k!</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Chat Area -->
+    <main class="chat-area">
+      <div class="messages-container">
+        <p style="text-align: center; color: var(--text-secondary); padding: 40px;">
+          🚀 Web3 Messenger<br>
+          <small>Прототип. Web3 интеграция в разработке...</small>
+        </p>
+      </div>
+      
+      <div class="input-container">
+        <input type="text" placeholder="Написать сообщение...">
+        <button class="send-btn">➤</button>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
