@@ -1,4 +1,4 @@
-// Web3 Messenger - Application Logic
+// Web3 Messenger - Application Logic v2
 // (c) Dima's Web3 Project
 
 console.log('🚀 Web3 Messenger loaded');
@@ -6,12 +6,14 @@ console.log('🚀 Web3 Messenger loaded');
 // Data Store
 const store = {
   currentChat: null,
+  currentFolder: 'all', // all, personal, news, work
   chats: [
     {
       id: 'dima',
       name: 'Дима',
       avatar: '👤',
       online: true,
+      folder: 'personal',
       preview: 'Привет! Как архитектура проекта?',
       time: '12:30',
       unread: 3,
@@ -25,6 +27,7 @@ const store = {
       name: 'AI Assistant',
       avatar: '🤖',
       online: true,
+      folder: 'work',
       preview: 'Готов помочь с кодом',
       time: '11:45',
       unread: 0,
@@ -37,12 +40,35 @@ const store = {
       name: 'Crypto News',
       avatar: '📢',
       online: false,
+      folder: 'news',
       preview: 'Bitcoin пробил $100k!',
       time: '10:20',
       unread: 24,
       messages: [
         { id: 1, text: '🚀 Bitcoin пробил $100k! Полный разбор ситуации...', sent: false, time: '10:20', status: 'delivered' }
       ]
+    },
+    {
+      id: 'innulka',
+      name: 'Иннулька',
+      avatar: '💜',
+      online: true,
+      folder: 'personal',
+      preview: '😂😘',
+      time: '12:34',
+      unread: 11,
+      messages: []
+    },
+    {
+      id: 'unity',
+      name: 'Евгений Unity',
+      avatar: '🎮',
+      online: false,
+      folder: 'work',
+      preview: 'Скинь билд',
+      time: '17:02',
+      unread: 0,
+      messages: []
     }
   ]
 };
@@ -50,16 +76,65 @@ const store = {
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
   console.log('✅ App initialized');
+  renderSidebar();
   renderChatList();
   setupEventListeners();
+  updateInputState();
 });
+
+// Render Sidebar with folder filtering
+function renderSidebar() {
+  const sidebarItems = document.querySelectorAll('.sidebar-item');
+  sidebarItems.forEach(item => {
+    item.addEventListener('click', function() {
+      // Remove active from all
+      sidebarItems.forEach(i => i.classList.remove('active'));
+      // Add active to clicked
+      this.classList.add('active');
+      
+      // Set folder filter
+      const folder = this.dataset.folder || 'all';
+      store.currentFolder = folder;
+      
+      // Re-render chat list with filter
+      renderChatList();
+      
+      // Close chat if open
+      if (store.currentChat) {
+        store.currentChat = null;
+        renderEmptyState();
+        updateInputState();
+      }
+    });
+  });
+}
+
+// Filter chats by folder
+function getFilteredChats() {
+  if (store.currentFolder === 'all') {
+    return store.chats;
+  }
+  return store.chats.filter(chat => chat.folder === store.currentFolder);
+}
 
 // Render Chat List
 function renderChatList() {
   const chatList = document.querySelector('.chat-list');
   if (!chatList) return;
   
-  chatList.innerHTML = store.chats.map(chat => `
+  const filteredChats = getFilteredChats();
+  
+  if (filteredChats.length === 0) {
+    chatList.innerHTML = `
+      <div style="padding: 20px; text-align: center; color: var(--text-muted);">
+        <div style="font-size: 32px; margin-bottom: 10px;">📭</div>
+        <p>Нет чатов в этой папке</p>
+      </div>
+    `;
+    return;
+  }
+  
+  chatList.innerHTML = filteredChats.map(chat => `
     <div class="chat-item ${store.currentChat === chat.id ? 'active' : ''}" data-chat-id="${chat.id}" onclick="selectChat('${chat.id}')">
       <div class="chat-avatar ${chat.online ? 'online' : ''}">${chat.avatar}</div>
       <div class="chat-info">
@@ -89,6 +164,7 @@ function selectChat(chatId) {
     renderChatList();
     renderMessages();
     updateChatHeader(chat);
+    updateInputState();
   }
 }
 
@@ -116,6 +192,20 @@ function renderMessages() {
   container.scrollTop = container.scrollHeight;
 }
 
+// Render Empty State
+function renderEmptyState() {
+  const container = document.querySelector('.messages-container');
+  if (container) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">💬</div>
+        <h3>Добро пожаловать в Web3 Messenger</h3>
+        <p>Выберите чат слева, чтобы начать общение</p>
+      </div>
+    `;
+  }
+}
+
 // Update Chat Header
 function updateChatHeader(chat) {
   const nameEl = document.querySelector('.chat-top-name');
@@ -123,8 +213,27 @@ function updateChatHeader(chat) {
   const avatarEl = document.querySelector('.chat-top-avatar');
   
   if (nameEl) nameEl.textContent = chat.name;
-  if (statusEl) statusEl.innerHTML = chat.online ? '<span>●</span> в сети' : 'был(а) недавно';
+  if (statusEl) statusEl.innerHTML = chat.online ? '<span style="color:var(--success)">●</span> в сети' : 'был(а) недавно';
   if (avatarEl) avatarEl.textContent = chat.avatar;
+}
+
+// Enable/Disable Input
+function updateInputState() {
+  const input = document.querySelector('.input-wrapper input');
+  const sendBtn = document.querySelector('.send-btn');
+  
+  if (input && sendBtn) {
+    if (store.currentChat) {
+      input.disabled = false;
+      sendBtn.disabled = false;
+      input.placeholder = 'Написать сообщение...';
+      input.focus();
+    } else {
+      input.disabled = true;
+      sendBtn.disabled = true;
+      input.placeholder = 'Выберите чат...';
+    }
+  }
 }
 
 // Send Message
@@ -161,25 +270,36 @@ function sendMessage() {
   setTimeout(() => {
     newMessage.status = 'delivered';
     renderMessages();
-  }, 1000);
+  }, 800);
   
   // Simulate reply (for demo)
-  if (chat.id === 'dima' || chat.id === 'ai') {
-    setTimeout(() => {
-      const replyMessage = {
-        id: Date.now() + 1,
-        text: 'Отлично! Продолжаем работать 🔥',
-        sent: false,
-        time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-        status: 'delivered'
-      };
-      chat.messages.push(replyMessage);
-      chat.preview = replyMessage.text;
-      chat.time = replyMessage.time;
+  setTimeout(() => {
+    const replies = [
+      'Отлично! Продолжаем 🔥',
+      'Принято, работаю над этим',
+      '👍',
+      'Интересная идея, давай обсудим',
+      'Спасибо за донат! 💜'
+    ];
+    const replyText = replies[Math.floor(Math.random() * replies.length)];
+    
+    const replyMessage = {
+      id: Date.now() + 1,
+      text: replyText,
+      sent: false,
+      time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+      status: 'delivered'
+    };
+    chat.messages.push(replyMessage);
+    chat.preview = replyText;
+    chat.time = replyMessage.time;
+    
+    // Only update if still in this chat
+    if (store.currentChat === chat.id) {
       renderMessages();
-      renderChatList();
-    }, 3000);
-  }
+    }
+    renderChatList();
+  }, 2500);
   
   console.log('📤 Message sent:', text);
 }
@@ -198,8 +318,18 @@ function setupEventListeners() {
       if (e.key === 'Enter') sendMessage();
     });
   }
+  
+  // Chat tabs filtering
+  const chatTabs = document.querySelectorAll('.chat-tab');
+  chatTabs.forEach(tab => {
+    tab.addEventListener('click', function() {
+      chatTabs.forEach(t => t.classList.remove('active'));
+      this.classList.add('active');
+      // Could add more filtering logic here
+    });
+  });
 }
 
-// Make functions global
+// Make functions global for HTML onclick
 window.selectChat = selectChat;
 window.sendMessage = sendMessage;
