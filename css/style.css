@@ -61,6 +61,7 @@ body {
   align-items: center;
   padding: 16px 0;
   gap: 12px;
+  overflow-y: auto;
 }
 
 .sidebar-item {
@@ -147,17 +148,19 @@ body {
   display: flex;
   gap: 6px;
   overflow-x: auto;
+  padding-bottom: 4px;
 }
 
 .chat-tab {
   padding: 6px 12px;
   background: var(--bg-tertiary);
   border-radius: 20px;
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.2s;
   color: var(--text-secondary);
+  user-select: none;
 }
 
 .chat-tab:hover {
