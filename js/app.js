@@ -7,7 +7,7 @@ import { http } from 'viem';
 
 // === КОНФИГУРАЦИЯ КОНТРАКТА ===
 // 🚨 ВАЖНО: Вставь сюда адрес твоего PROXY-контракта!
-const IDENTITY_PROXY_ADDRESS = '0xТВОЙ_АДРЕС_PROXY_КОНТРАКТА'; 
+const IDENTITY_PROXY_ADDRESS = '0x29F9f2D1E099DA051c632fc8AD7B761694eD41B4'; 
 
 // ABI (минимальное, только нужные функции)
 const IDENTITY_ABI = [
