@@ -1,223 +1,9 @@
-// Web3 Messenger - Application Logic v3
+// Web3 Messenger - Application Logic v3 (Fixed)
 // (c) Dima's Web3 Project
-// 🔗 Web3 | 🔐 Key Escrow | 💰 Monetization | 📦 Offline-first
-
 console.log('🚀 Web3 Messenger loaded');
 
-// ========== КОНФИГУРАЦИЯ ==========
-const CONFIG = {
-  RPC_URL: 'https://polygon-rpc.com',
-  CONTRACT_ADDRESS: null, // Заполнится после деплоя
-  OWNER_PUBLIC_KEY: null, // Твой публичный ключ для Key Escrow
-  IPFS_GATEWAY: 'https://ipfs.io/ipfs/',
-  GASLESS_ENABLED: true, // Paymaster поддержка
-};
-
-// ========== WEB3 PROVIDER ==========
-const Web3Provider = {
-  provider: null,
-  account: null,
-  chainId: null,
-
-  async init() {
-    if (typeof window.ethereum !== 'undefined') {
-      this.provider = window.ethereum;
-      await this.connect();
-      this.setupListeners();
-      console.log('✅ Web3 provider initialized');
-      return true;
-    }
-    console.warn('⚠️ MetaMask not detected');
-    return false;
-  },
-
-  async connect() {
-    try {
-      const accounts = await this.provider.request({ method: 'eth_requestAccounts' });
-      this.account = accounts[0];
-      this.chainId = await this.provider.request({ method: 'eth_chainId' });
-      
-      // Проверка сети
-      if (this.chainId !== '0x89') { // 0x89 = Polygon Mainnet
-        await this.provider.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x89' }],
-        });
-      }
-      
-      console.log('🔗 Connected:', this.account);
-      store.currentUser = this.account;
-      updateUIForWallet();
-      return true;
-    } catch (err) {
-      console.error('❌ Connection failed:', err);
-      return false;
-    }
-  },
-
-  setupListeners() {
-    this.provider.on('accountsChanged', (accounts) => {
-      store.currentUser = accounts[0] || null;
-      location.reload(); // Перезагрузка при смене аккаунта
-    });
-    
-    this.provider.on('chainChanged', () => location.reload());
-  },
-
-  async sendTransaction(tx) {
-    return await this.provider.request({ method: 'eth_sendTransaction', params: [tx] });
-  },
-
-  async signMessage(message) {
-    return await this.provider.request({
-      method: 'personal_sign',
-      params: [message, this.account],
-    });
-  }
-};
-
-// ========== KEY ESCROW CLIENT (Заготовка) ==========
-const KeyEscrowClient = {
-  // 🔐 Шифрование приватного ключа пользователя публичным ключом владельца
-  async encryptForOwner(userPrivateKey, ownerPublicKey) {
-    // В продакшене: использовать Web Crypto API или libsodium-wrappers
-    // Пример (упрощённый):
-    const encoder = new TextEncoder();
-    const data = encoder.encode(userPrivateKey);
-    
-    // Здесь должна быть реальная криптография:
-    // 1. Импортировать ownerPublicKey
-    // 2. Зашифровать data алгоритмом RSA-OAEP или ECIES
-    // 3. Вернуть base64-строку
-    
-    // Для демо возвращаем заглушку:
-    console.warn('🔐 KeyEscrow: Using mock encryption');
-    return btoa(userPrivateKey + ':encrypted_for:' + ownerPublicKey);
-  },
-
-  // 🔓 Отправка зашифрованного ключа в контракт
-  async escrowKey(encryptedKey) {
-    if (!CONFIG.CONTRACT_ADDRESS) {
-      console.error('❌ Contract address not set');
-      return false;
-    }
-    
-    // Здесь вызов контракта: identity.escrowMasterKey(encryptedKey)
-    console.log('📤 Escrowing key to:', CONFIG.CONTRACT_ADDRESS);
-    return true;
-  }
-};
-
-// ========== DONATION MODULE ==========
-const DonationModule = {
-  async sendDonation(recipient, amount, token = 'MATIC') {
-    if (!Web3Provider.account) {
-      alert('🔗 Сначала подключите кошелёк');
-      return false;
-    }
-
-    const value = token === 'MATIC' 
-      ? BigInt(Math.floor(amount * 1e18)).toString(16)
-      : '0x0'; // Для токенов нужна отдельная логика approve+transfer
-
-    try {
-      const txHash = await Web3Provider.sendTransaction({
-        from: Web3Provider.account,
-        to: recipient,
-        value: value,
-        // gas: CONFIG.GASLESS_ENABLED ? undefined : '21000',
-        // paymasterAndData: CONFIG.GASLESS_ENABLED ? await getPaymasterData() : undefined,
-      });
-      
-      console.log('💰 Donation sent:', txHash);
-      showNotification(`✅ Донат ${amount} ${token} отправлен!`, 'success');
-      
-      // Обновить историю донатов в UI
-      updateDonationHistory({ recipient, amount, token, txHash, time: new Date() });
-      return true;
-    } catch (err) {
-      console.error('❌ Donation failed:', err);
-      showNotification('❌ Ошибка транзакции', 'error');
-      return false;
-    }
-  }
-};
-
-// ========== MEDIA UPLOAD (IPFS + Encryption) ==========
-const MediaModule = {
-  async encryptAndUpload(file, recipientPublicKey) {
-    // 1. Шифрование файла на клиенте
-    const encrypted = await this.encryptFile(file, recipientPublicKey);
-    
-    // 2. Загрузка в IPFS (через пиннинг-сервис)
-    const formData = new FormData();
-    formData.append('file', new Blob([encrypted]), file.name);
-    
-    const response = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
-      method: 'POST',
-      headers: { /* Authorization */ },
-      body: formData,
-    });
-    
-    const result = await response.json();
-    return result.IpfsHash; // CID для хранения в контракте
-  },
-
-  async encryptFile(file, publicKey) {
-    // Заглушка: в продакшене использовать Web Crypto API
-    const arrayBuffer = await file.arrayBuffer();
-    // Здесь: шифрование через crypto.subtle.encrypt()
-    return arrayBuffer; // Возвращаем как есть для демо
-  },
-
-  getMediaUrl(cid) {
-    return `${CONFIG.IPFS_GATEWAY}${cid}`;
-  }
-};
-
-// ========== OFFLINE QUEUE ==========
-const OfflineQueue = {
-  queue: [],
-  
-  add(message) {
-    this.queue.push({ ...message, timestamp: Date.now(), status: 'queued' });
-    this.save();
-    console.log('📦 Message queued (offline)');
-  },
-  
-  async flush() {
-    if (!navigator.onLine) return;
-    
-    while (this.queue.length > 0) {
-      const msg = this.queue.shift();
-      const success = await this.sendToBackend(msg);
-      if (!success) {
-        this.queue.unshift(msg); // Вернуть в очередь при ошибке
-        break;
-      }
-    }
-    this.save();
-  },
-  
-  async sendToBackend(message) {
-    // Отправка на релеи / в XMTP / в контракт
-    console.log('📤 Flushing queued message:', message);
-    return true; // Для демо
-  },
-  
-  save() {
-    localStorage.setItem('messenger_queue', JSON.stringify(this.queue));
-  },
-  
-  load() {
-    const saved = localStorage.getItem('messenger_queue');
-    if (saved) this.queue = JSON.parse(saved);
-  }
-};
-
-// ========== DATA STORE ==========
+// Data Store
 const store = {
-  currentUser: null,
   currentChat: null,
   currentFolder: 'all',
   chats: [
@@ -235,123 +21,221 @@ const store = {
         { id: 2, text: 'Всё супер! Смотри, что набросал 👇', sent: true, time: '12:30', status: 'delivered' }
       ]
     },
-    // ... остальные чаты
-  ],
-  donations: [],
-  profile: null
+    {
+      id: 'ai',
+      name: 'AI Assistant',
+      avatar: '🤖',
+      online: true,
+      folder: 'work',
+      preview: 'Готов помочь с кодом',
+      time: '11:45',
+      unread: 0,
+      messages: [
+        { id: 1, text: 'Привет! Чем могу помочь?', sent: false, time: '11:45', status: 'delivered' }
+      ]
+    },
+    {
+      id: 'crypto',
+      name: 'Crypto News',
+      avatar: '📢',
+      online: false,
+      folder: 'news',
+      preview: 'Bitcoin пробил $100k!',
+      time: '10:20',
+      unread: 24,
+      messages: [
+        { id: 1, text: '🚀 Bitcoin пробил $100k! Полный разбор ситуации...', sent: false, time: '10:20', status: 'delivered' }
+      ]
+    }
+  ]
 };
 
-// ========== UI HELPERS ==========
-function showNotification(message, type = 'info') {
-  const toast = document.createElement('div');
-  toast.className = `toast toast-${type}`;
-  toast.textContent = message;
-  toast.style.cssText = `
-    position: fixed; bottom: 20px; right: 20px; 
-    padding: 12px 20px; border-radius: 8px; 
-    background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
-    color: white; z-index: 1000; animation: slideIn 0.3s ease;
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('✅ App initialized');
+  renderSidebar(); // ← Эта функция теперь есть!
+  renderChatList();
+  setupEventListeners();
+  updateInputState();
+});
+
+// 🔧 Render Sidebar (исправлено!)
+function renderSidebar() {
+  const sidebarItems = document.querySelectorAll('.sidebar-item');
+  sidebarItems.forEach(item => {
+    item.addEventListener('click', function() {
+      sidebarItems.forEach(i => i.classList.remove('active'));
+      this.classList.add('active');
+      const folder = this.dataset.folder || 'all';
+      store.currentFolder = folder;
+      renderChatList();
+      if (store.currentChat) {
+        store.currentChat = null;
+        renderEmptyState();
+        updateInputState();
+      }
+    });
+  });
+}
+
+// Filter chats by folder
+function getFilteredChats() {
+  if (store.currentFolder === 'all') return store.chats;
+  return store.chats.filter(chat => chat.folder === store.currentFolder);
+}
+
+// Render Chat List
+function renderChatList() {
+  const chatList = document.querySelector('.chat-list');
+  if (!chatList) return;
+  const filteredChats = getFilteredChats();
+  
+  if (filteredChats.length === 0) {
+    chatList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">📭<p>Нет чатов в этой папке</p></div>';
+    return;
+  }
+  
+  chatList.innerHTML = filteredChats.map(chat => `
+    <div class="chat-item ${store.currentChat === chat.id ? 'active' : ''}" data-chat-id="${chat.id}" onclick="selectChat('${chat.id}')">
+      <div class="chat-avatar ${chat.online ? 'online' : ''}">${chat.avatar}</div>
+      <div class="chat-info">
+        <div class="chat-header-row">
+          <div class="chat-name">${chat.name}</div>
+          <div class="chat-time">${chat.time}</div>
+        </div>
+        <div class="chat-preview">
+          <span>${chat.preview}</span>
+          ${chat.unread > 0 ? `<span class="unread-badge">${chat.unread}</span>` : ''}
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// Select Chat
+function selectChat(chatId) {
+  store.currentChat = chatId;
+  const chat = store.chats.find(c => c.id === chatId);
+  if (chat) {
+    chat.unread = 0;
+    renderChatList();
+    renderMessages();
+    updateChatHeader(chat);
+    updateInputState();
+  }
+}
+
+// Render Messages
+function renderMessages() {
+  const container = document.querySelector('.messages-container');
+  const chat = store.chats.find(c => c.id === store.currentChat);
+  if (!container || !chat) return;
+  
+  container.innerHTML = `
+    <div class="date-separator"><span>Сегодня</span></div>
+    ${chat.messages.map(msg => `
+      <div class="message ${msg.sent ? 'sent' : 'received'}">
+        <div class="message-text">${msg.text}</div>
+        <div class="message-meta">
+          <span>${msg.time}</span>
+          ${msg.sent ? `<span class="status-icon">${msg.status === 'delivered' ? '✓✓' : '✓'}</span>` : ''}
+        </div>
+      </div>
+    `).join('')}
   `;
-  document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 3000);
+  container.scrollTop = container.scrollHeight;
 }
 
-function updateUIForWallet() {
-  const walletBtn = document.querySelector('#wallet-connect');
-  if (walletBtn && Web3Provider.account) {
-    walletBtn.textContent = `${Web3Provider.account.slice(0,6)}...${Web3Provider.account.slice(-4)}`;
-    walletBtn.onclick = null; // Отключаем кнопку подключения
+// Render Empty State
+function renderEmptyState() {
+  const container = document.querySelector('.messages-container');
+  if (container) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">💬</div>
+        <h3>Добро пожаловать в Web3 Messenger</h3>
+        <p>Выберите чат слева, чтобы начать общение</p>
+      </div>
+    `;
   }
 }
 
-function updateDonationHistory(donation) {
-  store.donations.unshift(donation);
-  // Обновить вкладку "Кошелёк" если открыта
-  if (document.querySelector('[data-tab="wallet"]')?.classList.contains('active')) {
-    renderWalletTab();
+// Update Chat Header
+function updateChatHeader(chat) {
+  const nameEl = document.querySelector('.chat-top-name');
+  const statusEl = document.querySelector('.chat-top-status');
+  const avatarEl = document.querySelector('.chat-top-avatar');
+  if (nameEl) nameEl.textContent = chat.name;
+  if (statusEl) statusEl.innerHTML = chat.online ? '<span style="color:var(--success)">●</span> в сети' : 'был(а) недавно';
+  if (avatarEl) avatarEl.textContent = chat.avatar;
+}
+
+// Enable/Disable Input
+function updateInputState() {
+  const input = document.querySelector('.input-wrapper input');
+  const sendBtn = document.querySelector('.send-btn');
+  if (input && sendBtn) {
+    if (store.currentChat) {
+      input.disabled = false;
+      sendBtn.disabled = false;
+      input.placeholder = 'Написать сообщение...';
+      input.focus();
+    } else {
+      input.disabled = true;
+      sendBtn.disabled = true;
+      input.placeholder = 'Выберите чат...';
+    }
   }
 }
 
-// ========== RENDER FUNCTIONS (сокращённо) ==========
-function renderChatList() { /* ... как в предыдущей версии ... */ }
-function renderMessages() { /* ... */ }
-function selectChat(chatId) { /* ... */ }
+// Send Message
 function sendMessage() {
   const input = document.querySelector('.input-wrapper input');
   const text = input.value.trim();
   if (!text || !store.currentChat) return;
-
+  
   const chat = store.chats.find(c => c.id === store.currentChat);
   const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-
-  const newMessage = {
-    id: Date.now(),
-    text: text,
-    sent: true,
-    time: time,
-    status: navigator.onLine ? 'sending' : 'queued'
-  };
-
+  
+  const newMessage = { id: Date.now(), text, sent: true, time, status: 'sent' };
   chat.messages.push(newMessage);
   chat.preview = text;
   chat.time = time;
-
+  
   input.value = '';
   renderMessages();
   renderChatList();
-
-  if (navigator.onLine) {
-    // Отправка в реальном времени
-    setTimeout(() => {
-      newMessage.status = 'delivered';
-      renderMessages();
-    }, 800);
-  } else {
-    // Оффлайн-очередь
-    OfflineQueue.add({ chatId: store.currentChat, text, time });
-    showNotification('📦 Сообщение сохранено (оффлайн)', 'info');
-  }
+  
+  setTimeout(() => { newMessage.status = 'delivered'; renderMessages(); }, 800);
+  
+  setTimeout(() => {
+    const replies = ['Отлично! Продолжаем 🔥', 'Принято 👍', 'Интересно, давай обсудим'];
+    const reply = { id: Date.now()+1, text: replies[Math.floor(Math.random()*replies.length)], sent: false, time: new Date().toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'}), status: 'delivered' };
+    chat.messages.push(reply);
+    chat.preview = reply.text;
+    chat.time = reply.time;
+    if (store.currentChat === chat.id) renderMessages();
+    renderChatList();
+  }, 2500);
+  
+  console.log('📤 Sent:', text);
 }
 
-// ========== INITIALIZATION ==========
-document.addEventListener('DOMContentLoaded', async () => {
-  console.log('✅ App initialized');
-  
-  // Загрузка оффлайн-очереди
-  OfflineQueue.load();
-  
-  // Инициализация Web3
-  await Web3Provider.init();
-  
-  // Рендеринг
-  renderSidebar();
-  renderChatList();
-  setupEventListeners();
-  updateInputState();
-  
-  // Восстановление очереди при подключении
-  window.addEventListener('online', () => OfflineQueue.flush());
-});
-
-// ========== EVENT LISTENERS ==========
+// Setup Event Listeners
 function setupEventListeners() {
-  // ... существующие обработчики ...
+  const sendBtn = document.querySelector('.send-btn');
+  const msgInput = document.querySelector('.input-wrapper input');
+  if (sendBtn) sendBtn.addEventListener('click', sendMessage);
+  if (msgInput) msgInput.addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
   
-  // Кнопка доната
-  document.querySelector('.btn-donate')?.addEventListener('click', () => {
-    if (!store.currentChat) return;
-    const chat = store.chats.find(c => c.id === store.currentChat);
-    showDonateModal(chat.id);
-  });
-  
-  // Кнопка подключения кошелька
-  document.querySelector('#wallet-connect')?.addEventListener('click', () => {
-    Web3Provider.connect();
+  document.querySelectorAll('.chat-tab').forEach(tab => {
+    tab.addEventListener('click', function() {
+      document.querySelectorAll('.chat-tab').forEach(t => t.classList.remove('active'));
+      this.classList.add('active');
+    });
   });
 }
 
-// ========== EXPORT GLOBAL FUNCTIONS ==========
+// Global functions for HTML onclick
 window.selectChat = selectChat;
 window.sendMessage = sendMessage;
-window.sendDonation = DonationModule.sendDonation;
-window.encryptForEscrow = KeyEscrowClient.encryptForOwner;
