@@ -1,233 +1,350 @@
-// ==========================================
-// WEB3 MESSENGER - LOGIC
-// ==========================================
+// Web3 Messenger - Application Logic v3
+// (c) Dima's Web3 Project
+// 🔗 Web3 integration points marked with: // WEB3:
 
-// 🔧 НАСТРОЙКИ КОНТРАКТА
-// ⚠️ ВСТАВЬ СЮДА СВОЙ АДРЕС ПРОКСИ-КОНТРАКТА (из Remix)!
-const CONTRACT_ADDRESS = "0x29F9f2D1E099DA051c632fc8AD7B761694eD41B4"; 
+console.log('🚀 Web3 Messenger loaded');
 
-// Минимальный ABI (только нужные функции)
-const CONTRACT_ABI = [
-    "function initialize(address initialAdmin)",
-    "function registerProfile(string username, string avatarCID, string bio)",
-    "function updateProfile(string username, string avatarCID, string bio)",
-    "function isRegistered(address user) view returns (bool)",
-    "function getProfile(address user) view returns (string, string, string, uint256, bool)"
-];
-
-// ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
-let provider;
-let signer;
-let userAddress;
-let contract;
-let isUserRegistered = false;
-
-// ==========================================
-// 1. WEB3 ЛОГИКА (Блокчейн)
-// ==========================================
-
-async function connectWallet() {
-    if (typeof window.ethereum === 'undefined') {
-        alert("🚨 Пожалуйста, установите MetaMask!");
-        return;
+// ========== DATA STORE ==========
+const store = {
+  currentChat: null,
+  currentFolder: 'all', // all, personal, news, work
+  chats: [
+    {
+      id: 'dima',
+      name: 'Дима',
+      avatar: '👤',
+      online: true,
+      folder: 'personal',
+      preview: 'Привет! Как архитектура проекта?',
+      time: '12:30',
+      unread: 3,
+      messages: [
+        { id: 1, text: 'Привет! Как проект? Готов смотреть архитектуру?', sent: false, time: '12:28', status: 'delivered' },
+        { id: 2, text: 'Всё супер! Смотри, что набросал 👇', sent: true, time: '12:30', status: 'delivered' }
+      ]
+    },
+    {
+      id: 'ai',
+      name: 'AI Assistant',
+      avatar: '🤖',
+      online: true,
+      folder: 'work',
+      preview: 'Готов помочь с кодом',
+      time: '11:45',
+      unread: 0,
+      messages: [
+        { id: 1, text: 'Привет! Чем могу помочь?', sent: false, time: '11:45', status: 'delivered' }
+      ]
+    },
+    {
+      id: 'crypto',
+      name: 'Crypto News',
+      avatar: '📢',
+      online: false,
+      folder: 'news',
+      preview: 'Bitcoin пробил $100k!',
+      time: '10:20',
+      unread: 24,
+      messages: [
+        { id: 1, text: '🚀 Bitcoin пробил $100k! Полный разбор ситуации...', sent: false, time: '10:20', status: 'delivered' }
+      ]
+    },
+    {
+      id: 'innulka',
+      name: 'Иннулька',
+      avatar: '💜',
+      online: true,
+      folder: 'personal',
+      preview: '😂😘',
+      time: '12:34',
+      unread: 11,
+      messages: []
+    },
+    {
+      id: 'unity',
+      name: 'Евгений Unity',
+      avatar: '🎮',
+      online: false,
+      folder: 'work',
+      preview: 'Скинь билд',
+      time: '17:02',
+      unread: 0,
+      messages: []
     }
+  ]
+};
 
-    try {
-        // 1. Подключаем провайдер
-        provider = new ethers.providers.Web3Provider(window.ethereum);
-        // 2. Запрашиваем доступ к аккаунту
-        await provider.send("eth_requestAccounts", []);
-        // 3. Получаем signer (подписанта)
-        signer = provider.getSigner();
-        userAddress = await signer.getAddress();
-        
-        // 4. Подключаем контракт
-        contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-
-        // 5. Обновляем UI
-        updateUIConnected();
-        // 6. Проверяем регистрацию
-        await checkRegistration();
-
-    } catch (error) {
-        console.error("Ошибка подключения:", error);
-        alert("Ошибка подключения к кошельку.");
-    }
-}
-
-async function checkRegistration() {
-    try {
-        if (!contract) return;
-        // Вызываем функцию isRegistered из смарт-контракта
-        const registered = await contract.isRegistered(userAddress);
-        isUserRegistered = registered;
-        
-        if (!registered) {
-            showRegisterModal(); // Если не зарегистрирован - показываем окно
-        } else {
-            console.log("✅ Пользователь зарегистрирован в блокчейне");
-        }
-    } catch (error) {
-        console.error("Ошибка проверки статуса:", error);
-    }
-}
-
-async function registerUser() {
-    const username = document.getElementById('usernameInput').value;
-    const avatar = document.getElementById('avatarInput').value;
-    const bio = document.getElementById('bioInput').value;
-    const statusText = document.getElementById('regStatus');
-    const btn = document.getElementById('confirmRegBtn');
-
-    if (!username || !avatar) {
-        alert("Ник и аватар обязательны!");
-        return;
-    }
-
-    try {
-        statusText.innerText = "⏳ Отправка транзакции...";
-        btn.disabled = true;
-
-        // Вызываем функцию регистрации в смарт-контракте
-        const tx = await contract.registerProfile(username, avatar, bio);
-        statusText.innerText = "⛓️ Транзакция отправлена, ждем блок...";
-        
-        // Ждем завершения транзакции
-        await tx.wait();
-
-        statusText.innerText = "✅ Успешно зарегистрировано!";
-        isUserRegistered = true;
-        closeModal();
-        
-        // Перезагружаем список чатов (можно добавить новую логику здесь)
-        alert("Поздравляю! Твой профиль теперь в блокчейне Polygon.");
-
-    } catch (error) {
-        console.error("Ошибка регистрации:", error);
-        statusText.innerText = "❌ Ошибка транзакции: " + error.message;
-        btn.disabled = false;
-    }
-}
-
-// ==========================================
-// 2. UI ЛОГИКА (Интерфейс)
-// ==========================================
-
-function updateUIConnected() {
-    const btn = document.getElementById('connectWalletBtn');
-    btn.innerText = `✅ ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
-    btn.classList.add('connected');
-}
-
-// Управление модальным окном
-function showRegisterModal() {
-    document.getElementById('registerModal').classList.remove('hidden');
-}
-
-function closeModal() {
-    document.getElementById('registerModal').classList.add('hidden');
-}
-
-// Данные для чатов (Демо)
-const chatsData = [
-    { id: 'dima', name: 'Дима', avatar: '👤', online: true, preview: 'Привет! Как проект?', folder: 'personal' },
-    { id: 'ai', name: 'AI Assistant', avatar: '🤖', online: true, preview: 'Готов помочь', folder: 'work' },
-    { id: 'news', name: 'Crypto News', avatar: '📢', online: false, preview: 'Bitcoin вырос!', folder: 'news' }
-];
-
-// Инициализация при загрузке страницы
+// ========== INIT ==========
 document.addEventListener('DOMContentLoaded', () => {
-    renderChatList('all');
-    setupEventListeners();
+  console.log('✅ App initialized');
+  renderSidebar();
+  renderChatList();
+  setupEventListeners();
+  updateInputState();
 });
 
-function renderChatList(folder) {
-    const list = document.getElementById('chatList');
-    list.innerHTML = '';
-    
-    const filtered = folder === 'all' 
-        ? chatsData 
-        : chatsData.filter(c => c.folder === folder);
-
-    filtered.forEach(chat => {
-        const div = document.createElement('div');
-        div.className = 'chat-item';
-        div.onclick = () => openChat(chat);
-        div.innerHTML = `
-            <div class="chat-avatar">${chat.avatar}</div>
-            <div class="chat-info">
-                <div class="chat-header-row">
-                    <div class="chat-name">${chat.name}</div>
-                    <div class="chat-time">12:30</div>
-                </div>
-                <div class="chat-preview">${chat.preview}</div>
-            </div>
-        `;
-        list.appendChild(div);
+// ========== SIDEBAR & FOLDERS ==========
+function renderSidebar() {
+  const sidebarItems = document.querySelectorAll('.sidebar-item');
+  sidebarItems.forEach(item => {
+    item.addEventListener('click', function() {
+      sidebarItems.forEach(i => i.classList.remove('active'));
+      this.classList.add('active');
+      
+      const folder = this.dataset.folder || 'all';
+      store.currentFolder = folder;
+      
+      renderChatList();
+      
+      if (store.currentChat) {
+        store.currentChat = null;
+        renderEmptyState();
+        updateInputState();
+      }
     });
+  });
 }
 
-function openChat(chat) {
-    document.getElementById('chatName').innerText = chat.name;
-    document.getElementById('chatAvatar').innerText = chat.avatar;
-    document.getElementById('chatStatus').innerText = chat.online ? "в сети" : "был недавно";
-    
-    // Очищаем сообщения и добавляем тестовые
-    const container = document.getElementById('messagesContainer');
-    container.innerHTML = `
-        <div class="message received">
-            <div class="message-text">Привет! Как дела с блокчейном? 🚀</div>
-            <div class="message-meta">12:30 ✓✓</div>
+function getFilteredChats() {
+  if (store.currentFolder === 'all') return store.chats;
+  return store.chats.filter(chat => chat.folder === store.currentFolder);
+}
+
+// ========== CHAT LIST ==========
+function renderChatList() {
+  const chatList = document.querySelector('.chat-list');
+  if (!chatList) return;
+  
+  const filteredChats = getFilteredChats();
+  
+  if (filteredChats.length === 0) {
+    chatList.innerHTML = `
+      <div style="padding: 20px; text-align: center; color: var(--text-muted);">
+        <div style="font-size: 32px; margin-bottom: 10px;">📭</div>
+        <p>Нет чатов в этой папке</p>
+      </div>
+    `;
+    return;
+  }
+  
+  chatList.innerHTML = filteredChats.map(chat => `
+    <div class="chat-item ${store.currentChat === chat.id ? 'active' : ''}" 
+         data-chat-id="${chat.id}" 
+         onclick="selectChat('${chat.id}')">
+      <div class="chat-avatar ${chat.online ? 'online' : ''}">${chat.avatar}</div>
+      <div class="chat-info">
+        <div class="chat-header-row">
+          <div class="chat-name">${chat.name}</div>
+          <div class="chat-time">${chat.time}</div>
         </div>
-    `;
+        <div class="chat-preview">
+          <span>${chat.preview}</span>
+          ${chat.unread > 0 ? `<span class="unread-badge">${chat.unread}</span>` : ''}
+        </div>
+      </div>
+    </div>
+  `).join('');
 }
 
+// ========== SELECT CHAT ==========
+function selectChat(chatId) {
+  store.currentChat = chatId;
+  const chat = store.chats.find(c => c.id === chatId);
+  
+  if (chat) {
+    chat.unread = 0;
+    renderChatList();
+    renderMessages();
+    updateChatHeader(chat);
+    updateInputState();
+  }
+}
+
+// ========== MESSAGES ==========
+function renderMessages() {
+  const container = document.querySelector('.messages-container');
+  const chat = store.chats.find(c => c.id === store.currentChat);
+  
+  if (!container || !chat) return;
+  
+  container.innerHTML = `
+    <div class="date-separator"><span>Сегодня</span></div>
+    ${chat.messages.map(msg => `
+      <div class="message ${msg.sent ? 'sent' : 'received'}">
+        <div class="message-text">${escapeHtml(msg.text)}</div>
+        <div class="message-meta">
+          <span>${msg.time}</span>
+          ${msg.sent ? `<span class="status-icon">${msg.status === 'delivered' ? '✓✓' : '✓'}</span>` : ''}
+        </div>
+      </div>
+    `).join('')}
+  `;
+  
+  container.scrollTop = container.scrollHeight;
+}
+
+function renderEmptyState() {
+  const container = document.querySelector('.messages-container');
+  if (container) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">💬</div>
+        <h3>Добро пожаловать в Web3 Messenger</h3>
+        <p>Выберите чат слева, чтобы начать общение</p>
+        <p style="margin-top: 12px; font-size: 12px; color: var(--text-muted);">
+          🔒 Все сообщения зашифрованы
+        </p>
+      </div>
+    `;
+  }
+}
+
+function updateChatHeader(chat) {
+  const nameEl = document.querySelector('.chat-top-name');
+  const statusEl = document.querySelector('.chat-top-status');
+  const avatarEl = document.querySelector('.chat-top-avatar');
+  
+  if (nameEl) nameEl.textContent = chat.name;
+  if (statusEl) {
+    statusEl.innerHTML = chat.online 
+      ? '<span style="color:var(--success)">●</span> в сети' 
+      : 'был(а) недавно';
+  }
+  if (avatarEl) avatarEl.textContent = chat.avatar;
+}
+
+// ========== INPUT STATE ==========
+function updateInputState() {
+  const input = document.querySelector('.input-wrapper input');
+  const sendBtn = document.querySelector('.send-btn');
+  
+  if (input && sendBtn) {
+    if (store.currentChat) {
+      input.disabled = false;
+      sendBtn.disabled = false;
+      input.placeholder = 'Написать сообщение...';
+      input.focus();
+    } else {
+      input.disabled = true;
+      sendBtn.disabled = true;
+      input.placeholder = 'Выберите чат...';
+    }
+  }
+}
+
+// ========== SEND MESSAGE ==========
 function sendMessage() {
-    const input = document.getElementById('messageInput');
-    const text = input.value.trim();
-    if (!text) return;
-
-    const container = document.getElementById('messagesContainer');
-    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const input = document.querySelector('.input-wrapper input');
+  const text = input.value.trim();
+  
+  if (!text || !store.currentChat) return;
+  
+  const chat = store.chats.find(c => c.id === store.currentChat);
+  const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  
+  // WEB3: Здесь будет шифрование сообщения перед отправкой
+  // const encryptedText = await encryptMessage(text, chat.publicKey);
+  
+  const newMessage = {
+    id: Date.now(),
+    text: text,
+    sent: true,
+    time: time,
+    status: 'sent'
+  };
+  
+  chat.messages.push(newMessage);
+  chat.preview = text;
+  chat.time = time;
+  
+  input.value = '';
+  renderMessages();
+  renderChatList();
+  
+  // WEB3: Здесь будет отправка через XMTP / релеи
+  // await sendMessageToNetwork(chat.id, encryptedText);
+  
+  // Имитация доставки
+  setTimeout(() => {
+    newMessage.status = 'delivered';
+    renderMessages();
+  }, 800);
+  
+  // Имитация авто-ответа (для демо)
+  setTimeout(() => {
+    const replies = [
+      'Отлично! Продолжаем 🔥',
+      'Принято, работаю над этим',
+      '👍',
+      'Интересная идея, давай обсудим',
+      'Спасибо за донат! 💜'
+    ];
+    const replyText = replies[Math.floor(Math.random() * replies.length)];
     
-    // Добавляем сообщение в UI
-    const msgDiv = document.createElement('div');
-    msgDiv.className = 'message sent';
-    msgDiv.innerHTML = `
-        <div class="message-text">${text}</div>
-        <div class="message-meta">${time} ✓</div>
-    `;
-    container.appendChild(msgDiv);
-    input.value = '';
+    const replyMessage = {
+      id: Date.now() + 1,
+      text: replyText,
+      sent: false,
+      time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+      status: 'delivered'
+    };
     
-    // Скролл вниз
-    container.scrollTop = container.scrollHeight;
-
-    // Имитация ответа
-    setTimeout(() => {
-        const replyDiv = document.createElement('div');
-        replyDiv.className = 'message received';
-        replyDiv.innerHTML = `
-            <div class="message-text">Отлично! Продолжаем кодить 💪</div>
-            <div class="message-meta">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ✓✓</div>
-        `;
-        container.appendChild(replyDiv);
-        container.scrollTop = container.scrollHeight;
-    }, 1500);
+    chat.messages.push(replyMessage);
+    chat.preview = replyText;
+    chat.time = replyMessage.time;
+    
+    if (store.currentChat === chat.id) {
+      renderMessages();
+    }
+    renderChatList();
+  }, 2500);
+  
+  console.log('📤 Message sent:', text);
 }
 
+// ========== EVENT LISTENERS ==========
 function setupEventListeners() {
-    // Обработка папок
-    document.querySelectorAll('.sidebar-item').forEach(item => {
-        item.addEventListener('click', function() {
-            document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
-            this.classList.add('active');
-            renderChatList(this.dataset.folder);
-        });
+  const sendBtn = document.querySelector('.send-btn');
+  const msgInput = document.querySelector('.input-wrapper input');
+  
+  if (sendBtn) {
+    sendBtn.addEventListener('click', sendMessage);
+  }
+  
+  if (msgInput) {
+    msgInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendMessage();
     });
-
-    // Enter для отправки
-    document.getElementById('messageInput').addEventListener('keypress', function (e) {
-        if (e.key === 'Enter') sendMessage();
+  }
+  
+  // WEB3: Кнопка доната
+  const donateBtn = document.querySelector('.btn-donate');
+  if (donateBtn) {
+    donateBtn.addEventListener('click', () => {
+      // WEB3: Открыть модальное окно доната
+      // WEB3: Подписать транзакцию через wagmi + Paymaster
+      alert('💰 Модуль донатов: в разработке');
     });
+  }
+  
+  // Фильтрация по табам чатов
+  const chatTabs = document.querySelectorAll('.chat-tab');
+  chatTabs.forEach(tab => {
+    tab.addEventListener('click', function() {
+      chatTabs.forEach(t => t.classList.remove('active'));
+      this.classList.add('active');
+      // WEB3: Добавить фильтрацию по типу чата
+    });
+  });
 }
+
+// ========== UTILS ==========
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// ========== GLOBAL EXPORTS ==========
+window.selectChat = selectChat;
+window.sendMessage = sendMessage;
