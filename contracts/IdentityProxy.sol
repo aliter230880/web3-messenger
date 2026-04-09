@@ -3,8 +3,7 @@
 
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts-upgradeable/proxy/ERC1967/ERC1967ProxyUpgradeable.sol";
-
+import "github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/blob/release-v5.0/contracts/proxy/ERC1967/ERC1967ProxyUpgradeable.sol";
 /**
  * @title IdentityProxy
  * @dev Прокси-контракт для апгрейдабельной логики Identity
