@@ -4,7 +4,7 @@
 
 // 🔧 НАСТРОЙКИ КОНТРАКТА
 // ⚠️ ВСТАВЬ СЮДА СВОЙ АДРЕС ПРОКСИ-КОНТРАКТА (из Remix)!
-const CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E"; 
+const CONTRACT_ADDRESS = "0x29F9f2D1E099DA051c632fc8AD7B761694eD41B4"; 
 
 // Минимальный ABI (только нужные функции)
 const CONTRACT_ABI = [
