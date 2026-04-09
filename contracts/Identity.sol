@@ -27,7 +27,6 @@ contract Identity is
 {
     
     // ========== РОЛИ ==========
-    bytes32 public constant DEFAULT_ADMIN_ROLE = 0x00;
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     
