@@ -1,97 +1,122 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web3 Messenger</title>
-    <link rel="stylesheet" href="css/style.css">
-    <!-- Подключаем библиотеку для работы с блокчейном -->
-    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js" type="application/javascript"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web3 Messenger</title>
+  <link rel="stylesheet" href="css/style.css">
+  <!-- WEB3: Подключение wagmi/viem для работы с кошельками -->
+  <!-- <script type="module" src="https://cdn.jsdelivr.net/npm/@wagmi/core@latest/dist/index.js"></script> -->
 </head>
 <body>
+  <div class="app-container">
+    
+    <!-- ========== LEFT SIDEBAR (FOLDERS) ========== -->
+    <aside class="sidebar">
+      <div class="sidebar-item active" data-folder="all">
+        <span>💬</span>
+        <span>Все</span>
+        <span class="sidebar-badge">147</span>
+      </div>
+      <div class="sidebar-item" data-folder="personal">
+        <span>👤</span>
+        <span>Личное</span>
+      </div>
+      <div class="sidebar-item" data-folder="news">
+        <span>📰</span>
+        <span>Новости</span>
+        <span class="sidebar-badge">11</span>
+      </div>
+      <div class="sidebar-item" data-folder="work">
+        <span>💼</span>
+        <span>Работа</span>
+        <span class="sidebar-badge">38</span>
+      </div>
+      <div class="sidebar-item" style="margin-top: auto;" onclick="showWalletTab()">
+        <span>💰</span>
+        <span>Wallet</span>
+      </div>
+    </aside>
 
-    <!-- МОДАЛЬНОЕ ОКНО РЕГИСТРАЦИИ (Скрыто по умолчанию) -->
-    <div id="registerModal" class="modal hidden">
-        <div class="modal-content">
-            <span class="close" onclick="closeModal()">&times;</span>
-            <h2>🚀 Регистрация профиля</h2>
-            <p>Создай свой профиль в блокчейне Polygon.</p>
-            
-            <input type="text" id="usernameInput" placeholder="Твой никнейм (уникальный)" required>
-            <input type="text" id="avatarInput" placeholder="IPFS CID аватара (Qm...)" required>
-            <input type="text" id="bioInput" placeholder="Коротко о себе (необязательно)">
-            
-            <button id="confirmRegBtn" class="btn btn-primary" onclick="registerUser()">Подтвердить в блокчейне</button>
-            <p id="regStatus" class="status-text"></p>
+    <!-- ========== CHAT LIST PANEL ========== -->
+    <div class="chat-panel">
+      <div class="chat-header">
+        <div class="search-box">
+          <span>🔍</span>
+          <input type="text" placeholder="Search" id="search-input">
         </div>
+        <div class="chat-tabs">
+          <div class="chat-tab active">Все</div>
+          <div class="chat-tab">Непрочитанные</div>
+          <div class="chat-tab">VIP</div>
+        </div>
+      </div>
+      <div class="chat-list">
+        <!-- Chats rendered by JavaScript -->
+      </div>
     </div>
 
-    <div class="app-container">
-        <!-- ЛЕВАЯ ПАНЕЛЬ (ПАПКИ) -->
-        <aside class="sidebar">
-            <div class="sidebar-item active" data-folder="all">
-                <span>💬</span><span>Все</span>
-            </div>
-            <div class="sidebar-item" data-folder="personal">
-                <span>👤</span><span>Личное</span>
-            </div>
-            <div class="sidebar-item" data-folder="news">
-                <span>📰</span><span>Новости</span>
-            </div>
-            <div class="sidebar-item" data-folder="work">
-                <span>💼</span><span>Работа</span>
-            </div>
-            <div class="sidebar-item" style="margin-top: auto;">
-                <span>💰</span><span>Wallet</span>
-            </div>
-        </aside>
-
-        <!-- ЦЕНТРАЛЬНАЯ ПАНЕЛЬ (СПИСОК ЧАТОВ) -->
-        <div class="chat-panel">
-            <div class="chat-header">
-                <!-- КНОПКА ПОДКЛЮЧЕНИЯ КОШЕЛЬКА -->
-                <button id="connectWalletBtn" class="connect-btn" onclick="connectWallet()"> Connect Wallet</button>
-                
-                <div class="search-box">
-                    <span>🔍</span>
-                    <input type="text" placeholder="Search">
-                </div>
-            </div>
-            <div class="chat-list" id="chatList">
-                <!-- Чаты будут добавлены через JS -->
-            </div>
+    <!-- ========== MAIN CHAT AREA ========== -->
+    <main class="chat-area">
+      <div class="chat-top-bar">
+        <div class="chat-top-avatar">👤</div>
+        <div class="chat-top-info">
+          <div class="chat-top-name">Выберите чат</div>
+          <div class="chat-top-status">—</div>
         </div>
+        <div class="encryption-badge" title="End-to-End шифрование">🔐 E2E</div>
+      </div>
+      
+      <div class="messages-container">
+        <div class="empty-state">
+          <div class="empty-state-icon">💬</div>
+          <h3>Добро пожаловать в Web3 Messenger</h3>
+          <p>Выберите чат слева, чтобы начать общение</p>
+          <p style="margin-top: 12px; font-size: 12px; color: var(--text-muted);">
+            🔒 Все сообщения зашифрованы
+          </p>
+        </div>
+      </div>
+      
+      <div class="input-container">
+        <button class="icon-btn" title="Прикрепить" onclick="alert('📎 Загрузка: шифрование + IPFS')">📎</button>
+        <div class="input-wrapper">
+          <input type="text" placeholder="Выберите чат..." disabled id="msg-input">
+          <button class="icon-btn" title="Эмодзи" onclick="alert('😊 Эмодзи-панель')">😊</button>
+        </div>
+        <!-- WEB3: Кнопка доната -->
+        <button class="btn-donate" title="Отправить донат" onclick="alert('💰 Донат: в разработке')">💰</button>
+        <button class="send-btn" disabled title="Отправить">➤</button>
+      </div>
+    </main>
+    
+  </div>
 
-        <!-- ПРАВАЯ ПАНЕЛЬ (ОКНО ЧАТА) -->
-        <main class="chat-area">
-            <div class="chat-top-bar">
-                <div class="chat-top-avatar" id="chatAvatar">👤</div>
-                <div class="chat-top-info">
-                    <div class="chat-top-name" id="chatName">Выберите чат</div>
-                    <div class="chat-top-status" id="chatStatus">—</div>
-                </div>
-                <div class="encryption-badge">🔐 E2E</div>
-            </div>
-
-            <div class="messages-container" id="messagesContainer">
-                <div class="empty-state">
-                    <div class="empty-state-icon">👋</div>
-                    <h3>Добро пожаловать</h3>
-                    <p>Выберите чат слева или подключите кошелек для начала работы.</p>
-                </div>
-            </div>
-
-            <div class="input-container">
-                <button class="icon-btn">📎</button>
-                <div class="input-wrapper">
-                    <input type="text" placeholder="Написать сообщение..." id="messageInput">
-                    <button class="icon-btn">😊</button>
-                </div>
-                <button class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
-            </div>
-        </main>
-    </div>
-
-    <script src="js/app.js"></script>
+  <!-- ========== APP LOGIC ========== -->
+  <script src="js/app.js"></script>
+  
+  <!-- WEB3: Инициализация кошелька (раскомментировать при интеграции) -->
+  <!--
+  <script type="module">
+    import { createConfig, http } from '@wagmi/core';
+    import { polygon } from '@wagmi/core/chains';
+    
+    const config = createConfig({
+      chains: [polygon],
+      transports: { [polygon.id]: http() },
+    });
+    
+    console.log('🔗 Wagmi config initialized');
+  </script>
+  -->
+  
+  <script>
+    // Helper: показать вкладку кошелька
+    function showWalletTab() {
+      alert('💰 Кошелёк: интеграция с Polygon + донаты в разработке');
+      // WEB3: Здесь будет переход на экран кошелька
+      // или открытие модального окна с балансом
+    }
+  </script>
 </body>
 </html>
