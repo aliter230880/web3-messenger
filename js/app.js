@@ -1,335 +1,194 @@
-// Web3 Messenger - Application Logic v2
-// (c) Dima's Web3 Project
+import React, { useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import { WagmiProvider, createConfig, useAccount, useConnect, useDisconnect, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { polygon } from 'wagmi/chains';
+import { injected } from 'wagmi/connectors';
+import { http } from 'viem';
 
-console.log('🚀 Web3 Messenger loaded');
+// === КОНФИГУРАЦИЯ КОНТРАКТА ===
+// 🚨 ВАЖНО: Вставь сюда адрес твоего PROXY-контракта!
+const IDENTITY_PROXY_ADDRESS = '0xТВОЙ_АДРЕС_PROXY_КОНТРАКТА'; 
 
-// Data Store
-const store = {
-  currentChat: null,
-  currentFolder: 'all', // all, personal, news, work
-  chats: [
+// ABI (минимальное, только нужные функции)
+const IDENTITY_ABI = [
     {
-      id: 'dima',
-      name: 'Дима',
-      avatar: '👤',
-      online: true,
-      folder: 'personal',
-      preview: 'Привет! Как архитектура проекта?',
-      time: '12:30',
-      unread: 3,
-      messages: [
-        { id: 1, text: 'Привет! Как проект? Готов смотреть архитектуру?', sent: false, time: '12:28', status: 'delivered' },
-        { id: 2, text: 'Всё супер! Смотри, что набросал 👇', sent: true, time: '12:30', status: 'delivered' }
-      ]
+        "inputs": [{"internalType": "string", "name": "username", "type": "string"}, {"internalType": "string", "name": "avatarCID", "type": "string"}, {"internalType": "string", "name": "bio", "type": "string"}],
+        "name": "registerProfile",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
     },
     {
-      id: 'ai',
-      name: 'AI Assistant',
-      avatar: '🤖',
-      online: true,
-      folder: 'work',
-      preview: 'Готов помочь с кодом',
-      time: '11:45',
-      unread: 0,
-      messages: [
-        { id: 1, text: 'Привет! Чем могу помочь?', sent: false, time: '11:45', status: 'delivered' }
-      ]
+        "inputs": [{"internalType": "address", "name": "user", "type": "address"}],
+        "name": "getProfile",
+        "outputs": [
+            {"internalType": "string", "name": "username", "type": "string"},
+            {"internalType": "string", "name": "avatarCID", "type": "string"},
+            {"internalType": "string", "name": "bio", "type": "string"},
+            {"internalType": "uint256", "name": "registeredAt", "type": "uint256"},
+            {"internalType": "bool", "name": "isActive", "type": "bool"}
+        ],
+        "stateMutability": "view",
+        "type": "function"
     },
     {
-      id: 'crypto',
-      name: 'Crypto News',
-      avatar: '📢',
-      online: false,
-      folder: 'news',
-      preview: 'Bitcoin пробил $100k!',
-      time: '10:20',
-      unread: 24,
-      messages: [
-        { id: 1, text: '🚀 Bitcoin пробил $100k! Полный разбор ситуации...', sent: false, time: '10:20', status: 'delivered' }
-      ]
-    },
-    {
-      id: 'innulka',
-      name: 'Иннулька',
-      avatar: '💜',
-      online: true,
-      folder: 'personal',
-      preview: '😂😘',
-      time: '12:34',
-      unread: 11,
-      messages: []
-    },
-    {
-      id: 'unity',
-      name: 'Евгений Unity',
-      avatar: '🎮',
-      online: false,
-      folder: 'work',
-      preview: 'Скинь билд',
-      time: '17:02',
-      unread: 0,
-      messages: []
+        "inputs": [{"internalType": "address", "name": "user", "type": "address"}],
+        "name": "isRegistered",
+        "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+        "stateMutability": "view",
+        "type": "function"
     }
-  ]
-};
+];
 
-// Initialize
-document.addEventListener('DOMContentLoaded', () => {
-  console.log('✅ App initialized');
-  renderSidebar();
-  renderChatList();
-  setupEventListeners();
-  updateInputState();
+// === КОНФИГУРАЦИЯ WAGMI ===
+const wagmiConfig = createConfig({
+    chains: [polygon],
+    transports: {
+        [polygon.id]: http(),
+    },
+    connectors: [injected()],
 });
 
-// Render Sidebar with folder filtering
-function renderSidebar() {
-  const sidebarItems = document.querySelectorAll('.sidebar-item');
-  sidebarItems.forEach(item => {
-    item.addEventListener('click', function() {
-      // Remove active from all
-      sidebarItems.forEach(i => i.classList.remove('active'));
-      // Add active to clicked
-      this.classList.add('active');
-      
-      // Set folder filter
-      const folder = this.dataset.folder || 'all';
-      store.currentFolder = folder;
-      
-      // Re-render chat list with filter
-      renderChatList();
-      
-      // Close chat if open
-      if (store.currentChat) {
-        store.currentChat = null;
-        renderEmptyState();
-        updateInputState();
-      }
-    });
-  });
-}
+// === КОМПОНЕНТЫ ===
 
-// Filter chats by folder
-function getFilteredChats() {
-  if (store.currentFolder === 'all') {
-    return store.chats;
-  }
-  return store.chats.filter(chat => chat.folder === store.currentFolder);
-}
+function ConnectButton() {
+    const { connect, connectors } = useConnect();
+    const { disconnect } = useDisconnect();
+    const { address, isConnected } = useAccount();
 
-// Render Chat List
-function renderChatList() {
-  const chatList = document.querySelector('.chat-list');
-  if (!chatList) return;
-  
-  const filteredChats = getFilteredChats();
-  
-  if (filteredChats.length === 0) {
-    chatList.innerHTML = `
-      <div style="padding: 20px; text-align: center; color: var(--text-muted);">
-        <div style="font-size: 32px; margin-bottom: 10px;">📭</div>
-        <p>Нет чатов в этой папке</p>
-      </div>
-    `;
-    return;
-  }
-  
-  chatList.innerHTML = filteredChats.map(chat => `
-    <div class="chat-item ${store.currentChat === chat.id ? 'active' : ''}" data-chat-id="${chat.id}" onclick="selectChat('${chat.id}')">
-      <div class="chat-avatar ${chat.online ? 'online' : ''}">${chat.avatar}</div>
-      <div class="chat-info">
-        <div class="chat-header-row">
-          <div class="chat-name">${chat.name}</div>
-          <div class="chat-time">${chat.time}</div>
-        </div>
-        <div class="chat-preview">
-          <span>${chat.preview}</span>
-          ${chat.unread > 0 ? `<span class="unread-badge">${chat.unread}</span>` : ''}
-        </div>
-      </div>
-    </div>
-  `).join('');
-}
-
-// Select Chat
-function selectChat(chatId) {
-  store.currentChat = chatId;
-  const chat = store.chats.find(c => c.id === chatId);
-  
-  if (chat) {
-    // Clear unread
-    chat.unread = 0;
-    
-    // Update UI
-    renderChatList();
-    renderMessages();
-    updateChatHeader(chat);
-    updateInputState();
-  }
-}
-
-// Render Messages
-function renderMessages() {
-  const container = document.querySelector('.messages-container');
-  const chat = store.chats.find(c => c.id === store.currentChat);
-  
-  if (!container || !chat) return;
-  
-  container.innerHTML = `
-    <div class="date-separator"><span>Сегодня</span></div>
-    ${chat.messages.map(msg => `
-      <div class="message ${msg.sent ? 'sent' : 'received'}">
-        <div class="message-text">${msg.text}</div>
-        <div class="message-meta">
-          <span>${msg.time}</span>
-          ${msg.sent ? `<span class="status-icon">${msg.status === 'delivered' ? '✓✓' : '✓'}</span>` : ''}
-        </div>
-      </div>
-    `).join('')}
-  `;
-  
-  // Scroll to bottom
-  container.scrollTop = container.scrollHeight;
-}
-
-// Render Empty State
-function renderEmptyState() {
-  const container = document.querySelector('.messages-container');
-  if (container) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-state-icon">💬</div>
-        <h3>Добро пожаловать в Web3 Messenger</h3>
-        <p>Выберите чат слева, чтобы начать общение</p>
-      </div>
-    `;
-  }
-}
-
-// Update Chat Header
-function updateChatHeader(chat) {
-  const nameEl = document.querySelector('.chat-top-name');
-  const statusEl = document.querySelector('.chat-top-status');
-  const avatarEl = document.querySelector('.chat-top-avatar');
-  
-  if (nameEl) nameEl.textContent = chat.name;
-  if (statusEl) statusEl.innerHTML = chat.online ? '<span style="color:var(--success)">●</span> в сети' : 'был(а) недавно';
-  if (avatarEl) avatarEl.textContent = chat.avatar;
-}
-
-// Enable/Disable Input
-function updateInputState() {
-  const input = document.querySelector('.input-wrapper input');
-  const sendBtn = document.querySelector('.send-btn');
-  
-  if (input && sendBtn) {
-    if (store.currentChat) {
-      input.disabled = false;
-      sendBtn.disabled = false;
-      input.placeholder = 'Написать сообщение...';
-      input.focus();
-    } else {
-      input.disabled = true;
-      sendBtn.disabled = true;
-      input.placeholder = 'Выберите чат...';
+    if (isConnected) {
+        return (
+            <button className="btn btn-primary" onClick={() => disconnect()}>
+                Отключить {address?.slice(0, 6)}...{address?.slice(-4)}
+            </button>
+        );
     }
-  }
+
+    return (
+        <button className="btn btn-primary" onClick={() => connect({ connector: connectors[0] })}>
+            Подключить MetaMask
+        </button>
+    );
 }
 
-// Send Message
-function sendMessage() {
-  const input = document.querySelector('.input-wrapper input');
-  const text = input.value.trim();
-  
-  if (!text || !store.currentChat) return;
-  
-  const chat = store.chats.find(c => c.id === store.currentChat);
-  const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  
-  // Add message
-  const newMessage = {
-    id: Date.now(),
-    text: text,
-    sent: true,
-    time: time,
-    status: 'sent'
-  };
-  
-  chat.messages.push(newMessage);
-  chat.preview = text;
-  chat.time = time;
-  
-  // Clear input
-  input.value = '';
-  
-  // Update UI
-  renderMessages();
-  renderChatList();
-  
-  // Simulate delivery
-  setTimeout(() => {
-    newMessage.status = 'delivered';
-    renderMessages();
-  }, 800);
-  
-  // Simulate reply (for demo)
-  setTimeout(() => {
-    const replies = [
-      'Отлично! Продолжаем 🔥',
-      'Принято, работаю над этим',
-      '👍',
-      'Интересная идея, давай обсудим',
-      'Спасибо за донат! 💜'
-    ];
-    const replyText = replies[Math.floor(Math.random() * replies.length)];
-    
-    const replyMessage = {
-      id: Date.now() + 1,
-      text: replyText,
-      sent: false,
-      time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-      status: 'delivered'
+function RegisterForm() {
+    const { address, isConnected } = useAccount();
+    const { writeContract, data: hash, isPending } = useWriteContract();
+    const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
+
+    const [username, setUsername] = useState('');
+    const [avatarCID, setAvatarCID] = useState('');
+    const [bio, setBio] = useState('');
+    const [status, setStatus] = useState('');
+
+    const handleRegister = async (e) => {
+        e.preventDefault();
+        if (!username || !avatarCID) {
+            setStatus('Заполни ник и аватар (CID)!');
+            return;
+        }
+        setStatus('Подтверди транзакцию в MetaMask...');
+        
+        try {
+            await writeContract({
+                address: IDENTITY_PROXY_ADDRESS,
+                abi: IDENTITY_ABI,
+                functionName: 'registerProfile',
+                args: [username, avatarCID, bio],
+            });
+            setStatus('Транзакция отправлена! Ждем подтверждения...');
+        } catch (error) {
+            setStatus('Ошибка: ' + error.message);
+        }
     };
-    chat.messages.push(replyMessage);
-    chat.preview = replyText;
-    chat.time = replyMessage.time;
-    
-    // Only update if still in this chat
-    if (store.currentChat === chat.id) {
-      renderMessages();
+
+    if (!isConnected) {
+        return <p style={{color: 'var(--text-muted)'}}>Подключи кошелек, чтобы зарегистрироваться.</p>;
     }
-    renderChatList();
-  }, 2500);
-  
-  console.log('📤 Message sent:', text);
+
+    return (
+        <div className="wallet-card" style={{textAlign: 'left'}}>
+            <h3 style={{marginBottom: '16px'}}>📝 Регистрация профиля</h3>
+            <form onSubmit={handleRegister} style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
+                <input 
+                    className="input-wrapper" 
+                    placeholder="Никнейм (уникальный)" 
+                    value={username} 
+                    onChange={e => setUsername(e.target.value)} 
+                    required 
+                />
+                <input 
+                    className="input-wrapper" 
+                    placeholder="Avatar CID (IPFS)" 
+                    value={avatarCID} 
+                    onChange={e => setAvatarCID(e.target.value)} 
+                    required 
+                />
+                <input 
+                    className="input-wrapper" 
+                    placeholder="Био (необязательно)" 
+                    value={bio} 
+                    onChange={e => setBio(e.target.value)} 
+                />
+                <button className="btn btn-primary" type="submit" disabled={isPending || isConfirming || isConfirmed}>
+                    {isPending ? 'Подтверди в кошельке...' : isConfirming ? 'Ждем блокчейн...' : isConfirmed ? '✅ Зарегистрировано!' : 'Зарегистрировать'}
+                </button>
+            </form>
+            {status && <p style={{marginTop: '10px', fontSize: '13px', color: 'var(--text-secondary)'}}>{status}</p>}
+        </div>
+    );
 }
 
-// Setup Event Listeners
-function setupEventListeners() {
-  const sendBtn = document.querySelector('.send-btn');
-  const msgInput = document.querySelector('.input-wrapper input');
-  
-  if (sendBtn) {
-    sendBtn.addEventListener('click', sendMessage);
-  }
-  
-  if (msgInput) {
-    msgInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') sendMessage();
-    });
-  }
-  
-  // Chat tabs filtering
-  const chatTabs = document.querySelectorAll('.chat-tab');
-  chatTabs.forEach(tab => {
-    tab.addEventListener('click', function() {
-      chatTabs.forEach(t => t.classList.remove('active'));
-      this.classList.add('active');
-      // Could add more filtering logic here
-    });
-  });
+function App() {
+    return (
+        <WagmiProvider config={wagmiConfig}>
+            <div className="app-container">
+                <aside className="sidebar">
+                    <div className="sidebar-item active"><span>💬</span><span>Чаты</span></div>
+                    <div className="sidebar-item"><span>👤</span><span>Личное</span></div>
+                    <div className="sidebar-item"><span>📰</span><span>Новости</span></div>
+                    <div className="sidebar-item" style={{marginTop: 'auto'}}><span>💰</span><span>Wallet</span></div>
+                </aside>
+                
+                <div className="chat-panel">
+                    <div className="chat-header">
+                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px'}}>
+                            <h2>Web3 Messenger</h2>
+                            <ConnectButton />
+                        </div>
+                        <div className="search-box">
+                            <span>🔍</span>
+                            <input type="text" placeholder="Search" />
+                        </div>
+                    </div>
+                    <div className="chat-list">
+                        {/* Здесь пока заглушка чатов */}
+                        <div className="chat-item">
+                            <div className="chat-avatar">👤</div>
+                            <div className="chat-info">
+                                <div className="chat-name">Дима</div>
+                                <div className="chat-preview">Привет! Как проект?</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <main className="chat-area">
+                    <div className="chat-top-bar">
+                        <div className="chat-top-info">
+                            <div className="chat-top-name">Регистрация</div>
+                            <div className="chat-top-status">Создай свой профиль в блокчейне</div>
+                        </div>
+                    </div>
+                    <div className="messages-container" style={{padding: '20px'}}>
+                        <RegisterForm />
+                    </div>
+                </main>
+            </div>
+        </WagmiProvider>
+    );
 }
 
-// Make functions global for HTML onclick
-window.selectChat = selectChat;
-window.sendMessage = sendMessage;
+// === РЕНДЕР ===
+const root = createRoot(document.getElementById('root'));
+root.render(React.createElement(App));
