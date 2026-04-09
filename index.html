@@ -5,21 +5,87 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web3 Messenger</title>
     <link rel="stylesheet" href="css/style.css">
-    <!-- Подключаем React и Wagmi через CDN -->
-    <script type="importmap">
-    {
-        "imports": {
-            "react": "https://esm.sh/react@18.2.0",
-            "react-dom": "https://esm.sh/react-dom@18.2.0",
-            "wagmi": "https://esm.sh/wagmi@2.12.17",
-            "viem": "https://esm.sh/viem@2.21.16",
-            "@tanstack/react-query": "https://esm.sh/@tanstack/react-query@5.59.16"
-        }
-    }
-    </script>
 </head>
 <body>
-    <div id="root"></div>
-    <script type="module" src="js/app.js"></script>
+    <div class="app-container">
+        <!-- Left Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-item active" data-folder="all">
+                <span>💬</span>
+                <span>Все</span>
+                <span class="sidebar-badge">147</span>
+            </div>
+            <div class="sidebar-item" data-folder="personal">
+                <span>👤</span>
+                <span>Личное</span>
+            </div>
+            <div class="sidebar-item" data-folder="news">
+                <span>📰</span>
+                <span>Новости</span>
+                <span class="sidebar-badge">11</span>
+            </div>
+            <div class="sidebar-item" data-folder="work">
+                <span>💼</span>
+                <span>Работа</span>
+                <span class="sidebar-badge">38</span>
+            </div>
+            <div class="sidebar-item" style="margin-top: auto;" onclick="alert('💰 Кошелёк: интеграция в разработке')">
+                <span>💰</span>
+                <span>Wallet</span>
+            </div>
+        </aside>
+
+        <!-- Chat List Panel -->
+        <div class="chat-panel">
+            <div class="chat-header">
+                <div class="search-box">
+                    <span>🔍</span>
+                    <input type="text" placeholder="Search" id="search-input">
+                </div>
+                <div class="chat-tabs">
+                    <div class="chat-tab active">Все</div>
+                    <div class="chat-tab">Непрочитанные</div>
+                    <div class="chat-tab">VIP</div>
+                </div>
+            </div>
+            <div class="chat-list">
+                <!-- Chats rendered by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Main Chat Area -->
+        <main class="chat-area">
+            <div class="chat-top-bar">
+                <div class="chat-top-avatar">👤</div>
+                <div class="chat-top-info">
+                    <div class="chat-top-name">Выберите чат</div>
+                    <div class="chat-top-status">—</div>
+                </div>
+                <div class="encryption-badge" title="End-to-End шифрование">🔐 E2E</div>
+            </div>
+
+            <div class="messages-container">
+                <div class="empty-state">
+                    <div class="empty-state-icon">💬</div>
+                    <h3>Добро пожаловать в Web3 Messenger</h3>
+                    <p>Выберите чат слева, чтобы начать общение</p>
+                    <p style="margin-top: 12px; font-size: 12px; color: var(--text-muted);">
+                        🔒 Все сообщения зашифрованы
+                    </p>
+                </div>
+            </div>
+
+            <div class="input-container">
+                <button class="icon-btn" title="Прикрепить" onclick="alert('📎 Загрузка файлов: шифрование + IPFS')">📎</button>
+                <div class="input-wrapper">
+                    <input type="text" placeholder="Выберите чат..." disabled id="msg-input">
+                    <button class="icon-btn" title="Эмодзи" onclick="alert('😊 Эмодзи-панель')">😊</button>
+                </div>
+                <button class="send-btn" disabled title="Отправить">➤</button>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/app.js"></script>
 </body>
 </html>
