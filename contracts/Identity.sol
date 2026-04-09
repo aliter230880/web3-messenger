@@ -4,10 +4,10 @@
 
 pragma solidity ^0.8.20;
 
-import "github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/blob/release-v5.0/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/blob/release-v5.0/contracts/access/AccessControlUpgradeable.sol";
-import "github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/blob/release-v5.0/contracts/utils/ReentrancyGuardUpgradeable.sol";
-import "github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/blob/release-v5.0/contracts/utils/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 
 /**
  * @title Identity
