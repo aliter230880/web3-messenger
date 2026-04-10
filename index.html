@@ -1,133 +1,107 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Web3 Messenger</title>
-  <link rel="stylesheet" href="css/style.css">
-  <!-- Ethers.js для работы с блокчейном -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web3 Messenger</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js" type="application/javascript"></script>
 </head>
 <body>
-  <div class="app-container">
-    
-    <!-- ========== LEFT SIDEBAR ========== -->
-    <aside class="sidebar">
-      <div class="sidebar-item active" data-folder="all">
-        <span>💬</span><span>Все</span><span class="sidebar-badge">147</span>
-      </div>
-      <div class="sidebar-item" data-folder="personal">
-        <span>👤</span><span>Личное</span>
-      </div>
-      <div class="sidebar-item" data-folder="news">
-        <span>📰</span><span>Новости</span><span class="sidebar-badge">11</span>
-      </div>
-      <div class="sidebar-item" data-folder="work">
-        <span>💼</span><span>Работа</span><span class="sidebar-badge">38</span>
-      </div>
-      <div class="sidebar-item" style="margin-top: auto;">
-        <span>💰</span><span>Wallet</span>
-      </div>
-    </aside>
+    <div class="app-container">
+        <!-- Left Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-item active" data-folder="all">
+                <span>💬</span>
+                <span>Все</span>
+                <span class="sidebar-badge">147</span>
+            </div>
+            <div class="sidebar-item" data-folder="personal">
+                <span>👤</span>
+                <span>Личное</span>
+            </div>
+            <div class="sidebar-item" data-folder="news">
+                <span>📰</span>
+                <span>Новости</span>
+                <span class="sidebar-badge">11</span>
+            </div>
+            <div class="sidebar-item" data-folder="work">
+                <span>💼</span>
+                <span>Работа</span>
+                <span class="sidebar-badge">38</span>
+            </div>
+            <div class="sidebar-item" style="margin-top: auto;" onclick="alert('💰 Кошелёк: интеграция в разработке')">
+                <span>💰</span>
+                <span>Wallet</span>
+            </div>
+        </aside>
 
-    <!-- ========== CHAT LIST PANEL ========== -->
-    <div class="chat-panel">
-      <div class="chat-header">
-        <!-- 🔗 КНОПКА ПОДКЛЮЧЕНИЯ КОШЕЛЬКА -->
-        <button id="wallet-btn" class="btn-connect" onclick="connectWallet()">
-          <span>🦊</span><span>Подключить</span>
-        </button>
-        <!-- 🛡️ КНОПКА АДМИНА (исправлено!) -->
-        <button id="admin-btn" class="btn-admin" onclick="openAdminModal()" style="display:none;">
-          <span>🛡️</span><span>Админ</span>
-        </button>
-        <div class="search-box">
-          <span>🔍</span><input type="text" placeholder="Search" id="search-input">
+        <!-- Chat List Panel -->
+        <div class="chat-panel">
+            <div class="chat-header">
+                <div class="search-box">
+                    <span>🔍</span>
+                    <input type="text" placeholder="Search" id="search-input">
+                </div>
+                <div class="chat-tabs">
+                    <div class="chat-tab active">Все</div>
+                    <div class="chat-tab">Непрочитанные</div>
+                    <div class="chat-tab">VIP</div>
+                </div>
+            </div>
+            <div class="chat-list">
+                <!-- Chats rendered by JavaScript -->
+            </div>
         </div>
-        <div class="chat-tabs">
-          <div class="chat-tab active">Все</div>
-          <div class="chat-tab">Непрочитанные</div>
-          <div class="chat-tab">VIP</div>
-        </div>
-      </div>
-      <div class="chat-list" id="chat-list"></div>
+
+        <!-- Main Chat Area -->
+        <main class="chat-area">
+            <div class="chat-top-bar">
+                <div class="chat-top-avatar">👤</div>
+                <div class="chat-top-info">
+                    <div class="chat-top-name">Выберите чат</div>
+                    <div class="chat-top-status">—</div>
+                </div>
+                <div class="encryption-badge" title="End-to-End шифрование">🔐 E2E</div>
+            </div>
+            <div class="messages-container">
+                <div class="empty-state">
+                    <div class="empty-state-icon">💬</div>
+                    <h3>Добро пожаловать в Web3 Messenger</h3>
+                    <p>Выберите чат слева, чтобы начать общение</p>
+                    <p style="margin-top: 12px; font-size: 12px; color: var(--text-muted);">
+                        🔒 Все сообщения подписываются вашим кошельком
+                    </p>
+                </div>
+            </div>
+            <div class="input-container">
+                <button class="icon-btn" title="Прикрепить" onclick="alert('📎 Загрузка файлов: шифрование + IPFS')">📎</button>
+                <div class="input-wrapper">
+                    <input type="text" placeholder="Выберите чат..." disabled id="msg-input">
+                    <button class="icon-btn" title="Эмодзи" onclick="alert('😊 Эмодзи-панель')">😊</button>
+                </div>
+                <button class="send-btn" disabled title="Подписать и отправить" id="send-btn">➤</button>
+            </div>
+        </main>
     </div>
 
-    <!-- ========== MAIN CHAT AREA ========== -->
-    <main class="chat-area">
-      <div class="chat-top-bar">
-        <div class="chat-top-avatar">👤</div>
-        <div class="chat-top-info">
-          <div class="chat-top-name" id="chat-name">Выберите чат</div>
-          <div class="chat-top-status" id="chat-status">—</div>
+    <!-- Connect Wallet Modal -->
+    <div id="wallet-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🔗 Подключить кошелёк</h3>
+                <span class="close-modal" onclick="closeWalletModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p>Для отправки сообщений необходимо подключить кошелёк</p>
+                <button class="btn-connect" onclick="connectWallet()">
+                    <span>🦊</span> Подключить MetaMask
+                </button>
+                <div id="wallet-status" class="wallet-status"></div>
+            </div>
         </div>
-        <div class="encryption-badge" title="End-to-End шифрование">🔐 E2E</div>
-      </div>
-      
-      <div class="messages-container" id="messages-container">
-        <!-- Пустое состояние / Форма регистрации -->
-        <div class="empty-state" id="empty-state">
-          <div class="empty-state-icon">💬</div>
-          <h3>Добро пожаловать в Web3 Messenger</h3>
-          <p>Выберите чат слева, чтобы начать общение</p>
-          <p style="margin-top:12px;font-size:12px;color:var(--text-muted);">🔒 Все сообщения зашифрованы</p>
-        </div>
-      </div>
-
-      <div class="input-container">
-        <button class="icon-btn" title="Прикрепить">📎</button>
-        <div class="input-wrapper">
-          <input type="text" placeholder="Выберите чат..." disabled id="msg-input">
-          <button class="icon-btn" title="Эмодзи">😊</button>
-        </div>
-        <button class="btn-send" disabled id="send-btn" title="Отправить">➤</button>
-      </div>
-    </main>
-  </div>
-
-  <!-- 🛡️ ADMIN MODAL: KEY ESCROW -->
-  <div id="admin-modal" class="modal-overlay" style="display:none;">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>🛡️ Админ-панель: Key Escrow</h3>
-        <button class="modal-close" onclick="closeAdminModal()">×</button>
-      </div>
-      <div class="modal-body">
-        <p style="color:var(--text-secondary);margin-bottom:16px;">
-          Доступ только для владельца платформы. Введите адрес пользователя для извлечения зашифрованного мастер-ключа.
-        </p>
-        <label style="display:block;margin-bottom:8px;font-size:13px;">Адрес пользователя</label>
-        <input type="text" id="escrow-user-address" placeholder="0x..." 
-               style="width:100%;padding:10px;margin-bottom:16px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-primary);font-family:monospace;">
-        <button id="btn-access-escrow" class="btn btn-primary" onclick="accessEscrowKey()">
-          🔓 Получить доступ к ключу
-        </button>
-        <div id="escrow-status" style="margin-top:16px;font-size:13px;display:none;"></div>
-      </div>
     </div>
-  </div>
 
-  <!-- 🔗 WALLET CONNECT MODAL (опционально) -->
-  <div id="wallet-modal" class="modal-overlay" style="display:none;">
-    <div class="modal-content" style="max-width:400px;">
-      <div class="modal-header">
-        <h3>🦊 Подключение кошелька</h3>
-        <button class="modal-close" onclick="closeWalletModal()">×</button>
-      </div>
-      <div class="modal-body" style="text-align:center;">
-        <p style="margin-bottom:20px;color:var(--text-secondary);">
-          Выберите способ подключения для работы с блокчейном
-        </p>
-        <button class="btn btn-primary" style="width:100%;margin-bottom:10px;" onclick="connectWithMetaMask()">
-          MetaMask
-        </button>
-        <button class="btn" style="width:100%;background:var(--bg-tertiary);color:var(--text-primary);" onclick="closeWalletModal()">
-          Отмена
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <script src="js/app.js"></script>
+    <script src="js/app.js"></script>
 </body>
 </html>
