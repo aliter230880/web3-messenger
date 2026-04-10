@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web3 Messenger</title>
     <link rel="stylesheet" href="css/style.css">
-    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js" type="application/javascript"></script>
+    <!-- Ethers.js для Web3 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -22,7 +23,7 @@
             <nav class="sidebar-nav">
                 <button class="nav-item active" data-folder="all">
                     <span class="nav-icon">💬</span>
-                    <span class="nav-text">Все чаты</span>
+                    <span class="nav-text">Все</span>
                     <span class="nav-badge" id="badge-all">147</span>
                 </button>
                 <button class="nav-item" data-folder="personal">
@@ -44,16 +45,16 @@
             <div class="sidebar-footer">
                 <button id="wallet-btn" class="wallet-btn">
                     <span class="btn-icon">🦊</span>
-                    <span class="btn-text">Подключить кошелек</span>
+                    <span class="btn-text">Подключить</span>
                 </button>
-                <button id="admin-btn" class="admin-btn" style="display: none;">
+                <button id="admin-btn" class="admin-btn" style="display:none;">
                     <span class="btn-icon">🛡️</span>
                     <span class="btn-text">Админ</span>
                 </button>
             </div>
         </aside>
 
-        <!-- CHAT LIST -->
+        <!-- CHAT LIST PANEL -->
         <div class="chat-list-panel">
             <div class="chat-list-header">
                 <div class="search-box">
@@ -105,8 +106,8 @@
                     <p class="empty-state-hint">🔒 Все сообщения зашифрованы</p>
                 </div>
                 
-                <!-- Registration Modal (inline) -->
-                <div id="register-modal" class="modal-overlay" style="display: none;">
+                <!-- Registration Modal -->
+                <div id="register-modal" class="modal-overlay" style="display:none;">
                     <div class="modal-content">
                         <h3>🆔 Регистрация профиля</h3>
                         <p>Создай свой ончейн-профиль в Polygon. Это бесплатно (газ ~$0.02).</p>
@@ -120,14 +121,14 @@
             </div>
 
             <div class="message-input-area">
-                <button class="input-action-btn" title="Прикрепить">
+                <button class="input-action-btn" title="Прикрепить" onclick="alert('📎 Загрузка: шифрование + IPFS')">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
                     </svg>
                 </button>
                 <div class="input-wrapper">
                     <input type="text" id="msg-input" placeholder="Написать сообщение..." disabled>
-                    <button class="emoji-btn" title="Эмодзи">😊</button>
+                    <button class="emoji-btn" title="Эмодзи" onclick="alert('😊 Эмодзи-панель')">😊</button>
                 </div>
                 <button id="send-btn" class="send-btn" disabled title="Отправить">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -140,7 +141,7 @@
     </div>
 
     <!-- Admin Modal -->
-    <div id="admin-modal" class="modal-overlay" style="display: none;">
+    <div id="admin-modal" class="modal-overlay" style="display:none;">
         <div class="modal-content modal-large">
             <h3>🛡️ Админ-панель: Key Escrow</h3>
             <p>Доступ только для владельца платформы. Введите адрес пользователя для извлечения зашифрованного мастер-ключа.</p>
