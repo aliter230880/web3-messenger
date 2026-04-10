@@ -1,249 +1,209 @@
-// ==========================================
-// WEB3 MESSENGER - LOGIC + ADMIN KEY ESCROW
-// ==========================================
+// Web3 Messenger - Final v4
+console.log('🚀 Web3 Messenger Loaded');
 
-// 🔧 НАСТРОЙКИ
-const ADMIN_ADDRESS = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB"; // Твой адрес админа
-const CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E"; // Адрес твоего контракта
-
+const ADMIN_ADDRESS = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB"; // Твой адрес
+const CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E"; // Адрес контракта
 const CONTRACT_ABI = [
-    "function registerProfile(string username, string avatarCID, string bio) external",
     "function isRegistered(address user) view returns (bool)",
-    "function getEscrowedKey(address user) view returns (bytes)" // Функция для админа
+    "function registerProfile(string username, string avatarCID, string bio) external",
+    "function getEscrowedKey(address user) view returns (bytes)" // Функция админа
 ];
 
-// Переменные Web3
-let provider;
-let signer;
-let userAddress;
-let contract;
-let isRegistered = false;
+let provider, signer, contract, userAddress;
 let isAdmin = false;
+let isRegistered = false;
 
-// Данные чатов (Демо)
+// Данные чатов
 const store = {
     currentChat: null,
     chats: [
         { id: 'dima', name: 'Дима', avatar: '👤', online: true, preview: 'Привет! Как проект?' },
         { id: 'ai', name: 'AI Assistant', avatar: '🤖', online: true, preview: 'Готов помочь' },
-        { id: 'news', name: 'Crypto News', avatar: '📢', online: false, preview: 'Bitcoin вырос!' }
+        { id: 'crypto', name: 'Crypto News', avatar: '📢', online: false, preview: 'Bitcoin вырос!' }
     ]
 };
 
-// 1. ИНИЦИАЛИЗАЦИЯ
 document.addEventListener('DOMContentLoaded', () => {
     renderChatList();
-    setupEventListeners();
+    setupListeners();
 });
 
-// 2. ПОДКЛЮЧЕНИЕ КОШЕЛЬКА (MetaMask)
+// 1. Подключение кошелька
 async function connectWallet() {
-    if (typeof window.ethereum === 'undefined') {
-        alert("🚨 Установите MetaMask!");
-        return;
-    }
-    try {
-        const btn = document.getElementById('walletBtn');
-        btn.innerHTML = '⏳ Connecting...';
+    if (!window.ethereum) return alert("❌ Установите MetaMask!");
+    
+    const btn = document.getElementById('wallet-btn');
+    btn.innerHTML = '<span>⏳</span><span>...</span>';
 
-        // Подключаемся
+    try {
         provider = new ethers.providers.Web3Provider(window.ethereum);
         await provider.send("eth_requestAccounts", []);
         signer = provider.getSigner();
         userAddress = await signer.getAddress();
-
-        // Проверяем, админ ли это
-        if (userAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase()) {
-            isAdmin = true;
-            document.getElementById('adminBtn').style.display = 'flex'; // Показываем кнопку Админ
-            console.log("✅ Admin access granted");
+        
+        // Проверка сети
+        const network = await provider.getNetwork();
+        if (network.chainId !== 137) {
+            await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] });
         }
 
-        // Подключаем контракт
         contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-
-        // Обновляем UI
-        btn.innerHTML = `<span>✅</span> <span>${userAddress.slice(0,6)}...</span>`;
         
-        // Проверяем регистрацию
-        checkRegistration();
+        // Проверка админа
+        isAdmin = userAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
+        if (isAdmin) document.getElementById('admin-btn').style.display = 'flex';
 
-    } catch (error) {
-        console.error(error);
+        // Обновление UI
+        btn.innerHTML = `<span>✅</span><span>${userAddress.slice(0,6)}...</span>`;
+        
+        // Проверка регистрации
+        checkRegistration();
+    } catch (err) {
+        console.error(err);
+        btn.innerHTML = '<span>🦊</span><span>Connect</span>';
         alert("Ошибка подключения");
-        document.getElementById('walletBtn').innerHTML = '<span>🦊</span> <span>Connect Wallet</span>';
     }
 }
 
-// 3. ПРОВЕРКА РЕГИСТРАЦИИ
+// 2. Проверка регистрации
 async function checkRegistration() {
     if (!contract) return;
     try {
-        const status = await contract.isRegistered(userAddress);
-        isRegistered = status;
-        if (!status) {
-            document.getElementById('registerModal').style.display = 'flex';
+        isRegistered = await contract.isRegistered(userAddress);
+        if (!isRegistered) {
+            document.getElementById('reg-modal').style.display = 'flex';
         } else {
-            console.log("✅ Профиль активен");
-            enableChat();
+            enableInput(true);
         }
     } catch (e) {
-        console.log("Контракт ещё не готов или ошибка сети");
+        console.log("Контракт не найден или ошибка сети");
     }
 }
 
-// 4. РЕГИСТРАЦИЯ ПОЛЬЗОВАТЕЛЯ
-async function registerUser() {
-    const username = document.getElementById('regUsername').value;
-    const avatar = document.getElementById('regAvatar').value;
-    const bio = document.getElementById('regBio').value;
-    const statusEl = document.getElementById('regStatus');
+// 3. Регистрация
+async function registerProfile() {
+    const username = document.getElementById('reg-username').value;
+    const avatar = document.getElementById('reg-avatar').value || "QmTest";
+    const bio = document.getElementById('reg-bio').value;
+    const status = document.getElementById('reg-status');
+    const btn = document.getElementById('btn-reg');
 
-    if (!username || !avatar) { 
-        alert("Введите ник и аватар!"); 
-        return; 
-    }
+    if (!username) return alert("Введите ник!");
 
     try {
-        statusEl.innerText = "⏳ Подтвердите транзакцию в MetaMask...";
-        // Вызываем функцию контракта
+        btn.disabled = true;
+        status.innerText = "⏳ Подтвердите в MetaMask...";
+        
         const tx = await contract.registerProfile(username, avatar, bio);
-        statusEl.innerText = "⛓️ Ждем подтверждения сети...";
+        status.innerText = "⛓️ Ждем блокчейн...";
         await tx.wait();
-
-        statusEl.innerText = "✅ Успешно!";
-        isRegistered = true;
+        
+        status.innerText = "✅ Готово!";
         setTimeout(() => {
-            document.getElementById('registerModal').style.display = 'none';
-            enableChat();
-        }, 1500);
-    } catch (error) {
-        statusEl.innerText = "❌ Ошибка: " + error.message;
+            document.getElementById('reg-modal').style.display = 'none';
+            enableInput(true);
+        }, 1000);
+    } catch (err) {
+        status.innerText = "❌ Ошибка: " + err.message;
+        btn.disabled = false;
     }
 }
 
-// 5. АДМИН: ДОСТУП К КЛЮЧУ (KEY ESCROW)
+// 4. Админ: Key Escrow
 async function accessEscrowKey() {
-    if (!isAdmin) {
-        alert("🔒 Доступ запрещен");
-        return;
-    }
+    const addr = document.getElementById('escrow-address').value.trim();
+    const resultBox = document.getElementById('escrow-result');
+    
+    if (!ethers.utils.isAddress(addr)) return alert("Неверный адрес!");
+    if (!isAdmin) return alert("Нет прав админа!");
 
-    const targetAddress = document.getElementById('escrowUserAddress').value.trim();
-    const resultDiv = document.getElementById('escrowResult');
-
-    if (!ethers.utils.isAddress(targetAddress)) {
-        alert("Некорректный адрес Ethereum");
-        return;
-    }
+    resultBox.style.display = 'block';
+    resultBox.innerText = "🔍 Запрос к контракту...";
 
     try {
-        resultDiv.style.display = 'block';
-        resultDiv.innerText = "🔍 Запрос к блокчейну...";
+        // ВАЖНО: Если функция getEscrowedKey требует прав или её нет в ABI, будет ошибка.
+        // Мы используем call() через signer, чтобы эмулировать вызов от админа.
+        // Если контракт вернет ошибку revert, мы её перехватим.
         
-        // Вызываем функцию получения ключа из контракта
-        // В реальном контракте эта функция должна быть protected (onlyOwner/Admin)
-        const encryptedKey = await contract.getEscrowedKey(targetAddress);
+        // Примечание: В текущем контракте Identity.sol эта функция просто возвращает bytes.
+        // Если она пустая, вернется 0x.
+        const key = await contract.getEscrowedKey(addr);
         
-        if (encryptedKey && encryptedKey !== "0x") {
-            resultDiv.innerHTML = `<strong>✅ Ключ получен:</strong><br>${encryptedKey}`;
-            resultDiv.style.color = "#00ff00";
+        if (key && key !== "0x") {
+            resultBox.innerText = `✅ Ключ получен:\n${key}`;
+            resultBox.style.color = "#10b981";
         } else {
-            resultDiv.innerText = "⚠️ Ключ не найден для этого адреса.";
-            resultDiv.style.color = "orange";
+            resultBox.innerText = "⚠️ Ключ не найден (пустое значение)";
+            resultBox.style.color = "orange";
         }
-    } catch (error) {
-        console.error(error);
-        resultDiv.innerText = "❌ Ошибка чтения: " + (error.reason || error.message);
-        resultDiv.style.color = "red";
+    } catch (err) {
+        console.error(err);
+        // Частая ошибка: CALL_EXCEPTION означает, что транзакция была отклонена контрактом.
+        // Это может быть из-за того, что у пользователя нет зарегистрированного ключа.
+        resultBox.innerText = "❌ Ошибка контракта (возможно, ключ не создан):\n" + err.reason || err.message;
+        resultBox.style.color = "#ef4444";
     }
 }
 
-// 6. ОТПРАВКА СООБЩЕНИЯ (С Подписью)
-async function sendMessage() {
-    const input = document.getElementById('messageInput');
-    const text = input.value.trim();
-    if (!text || !store.currentChat) return;
-
-    // Крипто-подпись сообщения (XMTP style)
-    const signature = await signer.signMessage(text);
-    console.log("🔐 Сообщение подписано:", signature);
-
-    // Добавляем в UI
-    addMessageToUI(text, true);
-    input.value = '';
-}
-
-// --- UI ФУНКЦИИ ---
-
-function enableChat() {
-    document.getElementById('messageInput').disabled = false;
-    document.getElementById('sendBtn').disabled = false;
-}
-
-function closeModal() {
-    document.getElementById('registerModal').style.display = 'none';
-}
-
-function openAdminModal() {
-    document.getElementById('adminModal').style.display = 'flex';
-}
-
-function closeAdminModal() {
-    document.getElementById('adminModal').style.display = 'none';
-    document.getElementById('escrowResult').style.display = 'none';
+// UI Helpers
+function enableInput(enabled) {
+    document.getElementById('msg-input').disabled = !enabled;
+    document.getElementById('send-btn').disabled = !enabled;
+    if(enabled) document.getElementById('msg-input').placeholder = "Написать сообщение...";
 }
 
 function renderChatList() {
-    const list = document.getElementById('chatList');
-    list.innerHTML = '';
-    store.chats.forEach(chat => {
-        const div = document.createElement('div');
-        div.className = 'chat-item';
-        div.onclick = () => openChat(chat);
-        div.innerHTML = `
-            <div class="chat-avatar">${chat.avatar}</div>
-            <div class="chat-info">
-                <div class="chat-name">${chat.name}</div>
-                <div class="chat-preview">${chat.preview}</div>
-            </div>
-        `;
-        list.appendChild(div);
-    });
-}
-
-function openChat(chat) {
-    store.currentChat = chat;
-    document.getElementById('chatName').innerText = chat.name;
-    document.getElementById('chatAvatar').innerText = chat.avatar;
-    document.getElementById('chatStatus').innerText = chat.online ? "в сети" : "был недавно";
-    
-    const container = document.getElementById('messagesContainer');
-    container.innerHTML = `
-        <div class="message received">
-            <div class="message-text">Привет! Это начало зашифрованного чата 🔐</div>
-            <div class="message-meta">12:00 ✓✓</div>
+    const list = document.getElementById('chat-list');
+    list.innerHTML = store.chats.map(c => `
+        <div class="chat-item" onclick="selectChat('${c.id}')">
+            <div class="chat-avatar">${c.avatar}</div>
+            <div class="chat-info"><h4>${c.name}</h4><p>${c.preview}</p></div>
         </div>
-    `;
-
-    if (isRegistered) enableChat();
+    `).join('');
 }
 
-function addMessageToUI(text, isSent) {
-    const container = document.getElementById('messagesContainer');
-    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+function selectChat(id) {
+    const chat = store.chats.find(c => c.id === id);
+    document.getElementById('chat-name').innerText = chat.name;
+    document.getElementById('chat-avatar').innerText = chat.avatar;
+    document.getElementById('chat-status').innerText = chat.online ? "в сети" : "был недавно";
+    
+    // Очистка и демо-сообщение
+    const container = document.getElementById('messages-container');
+    container.innerHTML = `<div class="message received"><div class="message-text">Привет! Это тестовый чат. 🔐</div><div class="message-meta">12:00 ✓✓</div></div>`;
+    
+    if (isRegistered) enableInput(true);
+}
+
+function setupListeners() {
+    document.getElementById('send-btn').onclick = sendMessage;
+    document.getElementById('msg-input').onkeypress = (e) => { if(e.key === 'Enter') sendMessage(); };
+}
+
+function sendMessage() {
+    const input = document.getElementById('msg-input');
+    const text = input.value.trim();
+    if (!text) return;
+    
+    const container = document.getElementById('messages-container');
     const div = document.createElement('div');
-    div.className = `message ${isSent ? 'sent' : 'received'}`;
-    div.innerHTML = `
-        <div class="message-text">${text}</div>
-        <div class="message-meta">${time} ${isSent ? '✓✓' : ''}</div>
-    `;
+    div.className = 'message sent';
+    div.innerHTML = `<div class="message-text">${text}</div><div class="message-meta">${new Date().toLocaleTimeString()} ✓✓</div>`;
     container.appendChild(div);
     container.scrollTop = container.scrollHeight;
+    input.value = '';
+    
+    // Авто-ответ
+    setTimeout(() => {
+        const reply = document.createElement('div');
+        reply.className = 'message received';
+        reply.innerHTML = `<div class="message-text">Сообщение получено! (Web3 слой в разработке)</div><div class="message-meta">${new Date().toLocaleTimeString()} ✓✓</div>`;
+        container.appendChild(reply);
+        container.scrollTop = container.scrollHeight;
+    }, 1000);
 }
 
-function setupEventListeners() {
-    document.getElementById('messageInput').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendMessage();
-    });
-}
+// Modal Controls
+function closeRegModal() { document.getElementById('reg-modal').style.display = 'none'; }
+function openAdminModal() { document.getElementById('admin-modal').style.display = 'flex'; }
+function closeAdminModal() { document.getElementById('admin-modal').style.display = 'none'; }
