@@ -5,45 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Web3 Messenger</title>
   <link rel="stylesheet" href="css/style.css">
-  <!-- WEB3: Подключение wagmi/viem для работы с кошельками -->
-  <!-- <script type="module" src="https://cdn.jsdelivr.net/npm/@wagmi/core@latest/dist/index.js"></script> -->
+  <!-- Ethers.js v5.7.2 (стабильная версия для работы с MetaMask) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 </head>
 <body>
   <div class="app-container">
-    
-    <!-- ========== LEFT SIDEBAR (FOLDERS) ========== -->
+    <!-- Left Sidebar -->
     <aside class="sidebar">
       <div class="sidebar-item active" data-folder="all">
-        <span>💬</span>
-        <span>Все</span>
-        <span class="sidebar-badge">147</span>
+        <span>💬</span><span>Все</span><span class="sidebar-badge">147</span>
       </div>
       <div class="sidebar-item" data-folder="personal">
-        <span>👤</span>
-        <span>Личное</span>
+        <span>👤</span><span>Личное</span>
       </div>
       <div class="sidebar-item" data-folder="news">
-        <span>📰</span>
-        <span>Новости</span>
-        <span class="sidebar-badge">11</span>
+        <span>📰</span><span>Новости</span><span class="sidebar-badge">11</span>
       </div>
       <div class="sidebar-item" data-folder="work">
-        <span>💼</span>
-        <span>Работа</span>
-        <span class="sidebar-badge">38</span>
+        <span>💼</span><span>Работа</span><span class="sidebar-badge">38</span>
       </div>
-      <div class="sidebar-item" style="margin-top: auto;" onclick="showWalletTab()">
-        <span>💰</span>
-        <span>Wallet</span>
+      <div class="sidebar-item" id="wallet-sidebar" style="margin-top: auto; cursor: pointer;">
+        <span>🦊</span><span>Подключить</span>
       </div>
     </aside>
 
-    <!-- ========== CHAT LIST PANEL ========== -->
+    <!-- Chat List Panel -->
     <div class="chat-panel">
       <div class="chat-header">
         <div class="search-box">
-          <span>🔍</span>
-          <input type="text" placeholder="Search" id="search-input">
+          <span>🔍</span><input type="text" placeholder="Search" id="search-input">
         </div>
         <div class="chat-tabs">
           <div class="chat-tab active">Все</div>
@@ -51,72 +41,57 @@
           <div class="chat-tab">VIP</div>
         </div>
       </div>
-      <div class="chat-list">
-        <!-- Chats rendered by JavaScript -->
-      </div>
+      <div class="chat-list" id="chat-list"></div>
     </div>
 
-    <!-- ========== MAIN CHAT AREA ========== -->
+    <!-- Main Chat Area -->
     <main class="chat-area">
       <div class="chat-top-bar">
         <div class="chat-top-avatar">👤</div>
         <div class="chat-top-info">
-          <div class="chat-top-name">Выберите чат</div>
-          <div class="chat-top-status">—</div>
+          <div class="chat-top-name" id="chat-name">Выберите чат</div>
+          <div class="chat-top-status" id="chat-status">—</div>
         </div>
         <div class="encryption-badge" title="End-to-End шифрование">🔐 E2E</div>
       </div>
       
-      <div class="messages-container">
-        <div class="empty-state">
+      <div class="messages-container" id="messages-container">
+        <div class="empty-state" id="empty-state">
           <div class="empty-state-icon">💬</div>
           <h3>Добро пожаловать в Web3 Messenger</h3>
-          <p>Выберите чат слева, чтобы начать общение</p>
-          <p style="margin-top: 12px; font-size: 12px; color: var(--text-muted);">
-            🔒 Все сообщения зашифрованы
-          </p>
+          <p>Подключите кошелёк, чтобы создать профиль и начать общение.</p>
         </div>
       </div>
-      
+
       <div class="input-container">
-        <button class="icon-btn" title="Прикрепить" onclick="alert('📎 Загрузка: шифрование + IPFS')">📎</button>
+        <button class="icon-btn" title="Прикрепить">📎</button>
         <div class="input-wrapper">
           <input type="text" placeholder="Выберите чат..." disabled id="msg-input">
-          <button class="icon-btn" title="Эмодзи" onclick="alert('😊 Эмодзи-панель')">😊</button>
+          <button class="icon-btn" title="Эмодзи">😊</button>
         </div>
-        <!-- WEB3: Кнопка доната -->
-        <button class="btn-donate" title="Отправить донат" onclick="alert('💰 Донат: в разработке')">💰</button>
-        <button class="send-btn" disabled title="Отправить">➤</button>
+        <button class="send-btn" disabled id="send-btn">➤</button>
       </div>
     </main>
-    
   </div>
 
-  <!-- ========== APP LOGIC ========== -->
+  <!-- Модальное окно регистрации (скрыто по умолчанию) -->
+  <div id="register-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
+    <div style="background:var(--bg-secondary); padding:28px; border-radius:16px; max-width:440px; width:90%; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
+      <h2 style="margin-bottom:16px; font-size:22px;">👤 Регистрация профиля</h2>
+      <p style="color:var(--text-secondary); margin-bottom:20px; font-size:14px;">
+        Создайте свой ончейн-профиль в сети Polygon. Газ ~0.01 MATIC.
+      </p>
+      <input type="text" id="reg-username" placeholder="Никнейм (уникальный)" style="width:100%; padding:12px; margin-bottom:12px; border-radius:10px; border:1px solid var(--border); background:var(--bg-tertiary); color:var(--text-primary); font-size:14px;">
+      <input type="text" id="reg-avatar" placeholder="Avatar CID (например: QmX7k9...)" style="width:100%; padding:12px; margin-bottom:12px; border-radius:10px; border:1px solid var(--border); background:var(--bg-tertiary); color:var(--text-primary); font-size:14px;">
+      <textarea id="reg-bio" placeholder="О себе (необязательно)" rows="3" style="width:100%; padding:12px; margin-bottom:16px; border-radius:10px; border:1px solid var(--border); background:var(--bg-tertiary); color:var(--text-primary); resize:none; font-size:14px;"></textarea>
+      <div style="display:flex; gap:12px;">
+        <button onclick="document.getElementById('register-modal').style.display='none'" style="flex:1; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--bg-tertiary); color:var(--text-primary); cursor:pointer; font-weight:500;">Отмена</button>
+        <button id="btn-register" style="flex:1; padding:12px; border-radius:10px; border:none; background:var(--accent); color:white; cursor:pointer; font-weight:600;">Зарегистрировать</button>
+      </div>
+      <p id="reg-status" style="margin-top:14px; font-size:12px; text-align:center; color:var(--text-muted); min-height:16px;"></p>
+    </div>
+  </div>
+
   <script src="js/app.js"></script>
-  
-  <!-- WEB3: Инициализация кошелька (раскомментировать при интеграции) -->
-  <!--
-  <script type="module">
-    import { createConfig, http } from '@wagmi/core';
-    import { polygon } from '@wagmi/core/chains';
-    
-    const config = createConfig({
-      chains: [polygon],
-      transports: { [polygon.id]: http() },
-    });
-    
-    console.log('🔗 Wagmi config initialized');
-  </script>
-  -->
-  
-  <script>
-    // Helper: показать вкладку кошелька
-    function showWalletTab() {
-      alert('💰 Кошелёк: интеграция с Polygon + донаты в разработке');
-      // WEB3: Здесь будет переход на экран кошелька
-      // или открытие модального окна с балансом
-    }
-  </script>
 </body>
 </html>
