@@ -1,5 +1,6 @@
 // Web3 Messenger - App Logic v4
 // ✅ Contacts + Share Profile + Wallet Signature + Admin UI
+// ⚡ Оптимизация: Debounce, DocumentFragment, ленивая инициализация
 
 console.log('🚀 Web3 Messenger loaded');
 
@@ -15,13 +16,31 @@ const ADMIN_ADDRESS = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
 const CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
 const BASE_URL = "https://aliter230880.github.io/web3-messenger/";
 
-// Хранилище контактов
+// 🔧 Оптимизация: Debounce функция для поиска
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// Хранилище контактов с кэшированием
 const contactsStore = {
     list: [],
+    cache: new Map(), // Кэш для быстрого поиска
     load() {
         try {
             const saved = localStorage.getItem('web3messenger_contacts');
-            if (saved) this.list = JSON.parse(saved);
+            if (saved) {
+                this.list = JSON.parse(saved);
+                // Заполняем кэш
+                this.list.forEach(c => this.cache.set(c.address.toLowerCase(), c));
+            }
         } catch (e) { console.warn('Contacts load error:', e); }
     },
     save() {
@@ -30,15 +49,17 @@ const contactsStore = {
         } catch (e) { console.warn('Contacts save error:', e); }
     },
     add(contact) {
-        if (!this.list.find(c => c.address.toLowerCase() === contact.address.toLowerCase())) {
+        const key = contact.address.toLowerCase();
+        if (!this.cache.has(key)) {
             this.list.push(contact);
+            this.cache.set(key, contact);
             this.save();
             return true;
         }
         return false;
     },
     get(address) {
-        return this.list.find(c => c.address.toLowerCase() === address.toLowerCase());
+        return this.cache.get(address.toLowerCase());
     }
 };
 
@@ -415,35 +436,51 @@ function renderSidebar() {
     });
 }
 
+// 🔧 Оптимизация: DocumentFragment для рендеринга списка чатов
 function renderChatList() {
     const list = document.getElementById('chat-list');
-    // Объединяем демо-чаты с контактами
-    const allChats = [...store.chats];
     
-    // Добавляем контакты из localStorage
-    contactsStore.list.forEach(contact => {
-        if (!allChats.find(c => c.id === contact.address)) {
-            allChats.push({
-                id: contact.address,
-                name: contact.username || contact.address.slice(0, 8) + '...',
-                avatar: contact.avatarCID ? '🖼️' : '👤',
-                online: false,
-                folder: 'personal',
-                preview: 'Напишите первое сообщение',
-                time: '',
-                unread: 0,
-                messages: [],
-                isContact: true
-            });
-        }
-    });
+    // 🔧 Оптимизация: кэширование allChats, если данные не изменились
+    if (!renderChatList.cache || renderChatList.cacheVersion !== contactsStore.list.length + store.chats.length) {
+        // Объединяем демо-чаты с контактами
+        const allChats = [...store.chats];
+        
+        // Добавляем контакты из localStorage
+        contactsStore.list.forEach(contact => {
+            if (!allChats.find(c => c.id === contact.address)) {
+                allChats.push({
+                    id: contact.address,
+                    name: contact.username || contact.address.slice(0, 8) + '...',
+                    avatar: contact.avatarCID ? '🖼️' : '👤',
+                    online: false,
+                    folder: 'personal',
+                    preview: 'Напишите первое сообщение',
+                    time: '',
+                    unread: 0,
+                    messages: [],
+                    isContact: true
+                });
+            }
+        });
+        
+        renderChatList.cache = allChats;
+        renderChatList.cacheVersion = contactsStore.list.length + store.chats.length;
+    }
     
+    const allChats = renderChatList.cache;
     const filtered = store.currentFolder === 'all' 
         ? allChats 
         : allChats.filter(c => c.folder === store.currentFolder);
     
-    list.innerHTML = filtered.map(chat => `
-        <div class="chat-item ${store.currentChat === chat.id ? 'active' : ''}" onclick="selectChat('${chat.id}')">
+    // 🔧 Оптимизация: DocumentFragment вместо innerHTML
+    list.innerHTML = '';
+    const fragment = document.createDocumentFragment();
+    
+    filtered.forEach(chat => {
+        const div = document.createElement('div');
+        div.className = `chat-item ${store.currentChat === chat.id ? 'active' : ''}`;
+        div.onclick = () => selectChat(chat.id);
+        div.innerHTML = `
             <div class="chat-avatar ${chat.online ? 'online' : ''}">${chat.avatar}</div>
             <div class="chat-info">
                 <div class="chat-header-row">
@@ -452,8 +489,11 @@ function renderChatList() {
                 </div>
                 <div class="chat-preview">${chat.preview} ${chat.unread ? `<span class="badge">${chat.unread}</span>` : ''}</div>
             </div>
-        </div>
-    `).join('');
+        `;
+        fragment.appendChild(div);
+    });
+    
+    list.appendChild(fragment);
 }
 
 function selectChat(id) {
@@ -537,15 +577,17 @@ function setupEventListeners() {
     document.getElementById('msg-input').onkeypress = (e) => { if (e.key === 'Enter') sendMessage(); };
     document.getElementById('wallet-btn').onclick = () => openModal('wallet-modal');
     document.getElementById('connect-btn').onclick = connectWallet;
-    
-    // Поиск по чатам
-    document.getElementById('search-input').oninput = (e) => {
-        const query = e.target.value.toLowerCase();
+    // 🔧 Оптимизация: Debounce для поиска
+    const debouncedSearch = debounce((query) => {
         document.querySelectorAll('.chat-item').forEach(item => {
             const name = item.querySelector('.chat-name')?.textContent.toLowerCase() || '';
             item.style.display = name.includes(query) ? 'flex' : 'none';
         });
-    };
+    }, 300);
+    
+    document.getElementById('search-input').addEventListener('input', (e) => {
+        debouncedSearch(e.target.value.toLowerCase());
+    });
 }
 
 // Модалки
