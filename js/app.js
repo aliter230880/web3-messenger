@@ -1,5 +1,5 @@
-// Web3 Messenger - App Logic v2
-// ✅ Исправлено: рабочий CDN + подпись сообщений + защита от ошибок
+// Web3 Messenger - App Logic v3
+// ✅ Admin Button + Key Escrow + Wallet Signature + Chat UI
 
 console.log('🚀 Web3 Messenger loaded');
 
@@ -10,6 +10,8 @@ if (typeof ethers === 'undefined') {
 
 // Глобальные переменные
 let provider, signer, userAddress;
+let isAdmin = false;
+const ADMIN_ADDRESS = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
 const CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
 
 // Данные чатов
@@ -47,7 +49,7 @@ async function checkWallet() {
 // Инициализация кошелька
 async function initWallet() {
     if (!window.ethers) {
-        showError('❌ Библиотека ethers не загружена');
+        showError('wallet-msg', '❌ Библиотека ethers не загружена');
         return;
     }
     try {
@@ -55,18 +57,23 @@ async function initWallet() {
         signer = provider.getSigner();
         userAddress = await signer.getAddress();
         console.log('✅ Connected:', userAddress);
+        
+        // 🔐 Проверка прав админа
+        isAdmin = userAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
+        updateAdminButton();
+        
         updateWalletUI();
         updateInputState();
     } catch (e) {
         console.error('Init error:', e);
-        showError('Ошибка: ' + e.message);
+        showError('wallet-msg', 'Ошибка: ' + e.message);
     }
 }
 
 // Подключение кошелька
 async function connectWallet() {
     if (!window.ethereum) {
-        showError('⚠️ Установите MetaMask');
+        showError('wallet-msg', '⚠️ Установите MetaMask');
         return;
     }
     const btn = document.getElementById('connect-btn');
@@ -82,12 +89,76 @@ async function connectWallet() {
         
         msg.textContent = '✅ Подключено!';
         msg.className = 'status-msg success';
-        setTimeout(() => closeModal(), 1000);
+        setTimeout(() => closeModal('wallet-modal'), 1000);
     } catch (e) {
         console.error('Connect error:', e);
         msg.textContent = '❌ ' + (e.message || 'Отменено');
         msg.className = 'status-msg error';
         btn.disabled = false;
+    }
+}
+
+// 🔐 Обновление кнопки Админ
+function updateAdminButton() {
+    const adminBtn = document.getElementById('admin-btn');
+    if (adminBtn) {
+        adminBtn.style.display = isAdmin ? 'flex' : 'none';
+    }
+}
+
+// 🔐 Открытие модалки Админ
+function openAdminModal() {
+    if (!isAdmin) {
+        alert('🔒 Доступ разрешён только владельцу платформы.');
+        return;
+    }
+    document.getElementById('admin-modal').style.display = 'flex';
+    // Сброс состояния
+    document.getElementById('escrow-status').style.display = 'none';
+    document.getElementById('escrow-user-address').value = '';
+}
+
+// 🔐 Запрос ключа (Key Escrow Flow)
+async function accessEscrowKey() {
+    const userAddr = document.getElementById('escrow-user-address').value.trim();
+    const statusEl = document.getElementById('escrow-status');
+    
+    // Валидация адреса
+    if (!userAddr || !ethers.utils.isAddress(userAddr)) {
+        statusEl.textContent = '⚠️ Введите корректный адрес Ethereum';
+        statusEl.style.color = 'var(--warning)';
+        statusEl.style.display = 'block';
+        return;
+    }
+
+    statusEl.textContent = '🔍 Запрос к смарт-контракту...';
+    statusEl.style.color = 'var(--text-muted)';
+    statusEl.style.display = 'block';
+
+    try {
+        // 🔐 РЕАЛЬНЫЙ ВЫЗОВ (когда функция будет в контракте):
+        // const encryptedKey = await contract.getEscrowedKey(userAddr);
+        
+        // 👇 Пока имитация для демонстрации UI:
+        await new Promise(r => setTimeout(r, 1200));
+        const mockKey = "0x" + Array(64).fill(0).map(() => 
+            Math.floor(Math.random()*16).toString(16)).join('');
+        
+        // Отображение результата
+        statusEl.innerHTML = `
+            ✅ Ключ получен!<br>
+            <code style="background:var(--bg-tertiary); padding:6px 10px; 
+                         border-radius:6px; word-break:break-all; font-size:11px;">
+                ${mockKey}
+            </code>
+        `;
+        statusEl.style.color = 'var(--success)';
+        
+        console.log('🔓 Escrow Key Retrieved:', mockKey);
+        
+    } catch (err) {
+        statusEl.textContent = '❌ Ошибка: ' + (err.reason || err.message);
+        statusEl.style.color = 'var(--danger)';
     }
 }
 
@@ -104,7 +175,7 @@ async function sendMessage() {
     if (!text || !store.currentChat) return;
     
     if (!signer) {
-        openModal();
+        openModal('wallet-modal');
         return;
     }
     
@@ -112,7 +183,6 @@ async function sendMessage() {
     const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
     
     try {
-        // Добавляем сообщение со статусом "ожидание"
         const msg = {
             id: Date.now(),
             text: text,
@@ -128,7 +198,6 @@ async function sendMessage() {
         input.value = '';
         renderMessages();
         
-        // Подписываем
         const signature = await signMessage(text);
         msg.signature = signature;
         msg.status = 'delivered';
@@ -136,7 +205,6 @@ async function sendMessage() {
         renderMessages();
         console.log('✅ Signed:', signature.slice(0, 20) + '...');
         
-        // Авто-ответ (демо)
         setTimeout(() => {
             const reply = {
                 id: Date.now() + 1,
@@ -160,15 +228,17 @@ async function sendMessage() {
 // Рендеринг
 function renderSidebar() {
     document.querySelectorAll('.sidebar-item').forEach(item => {
-        item.onclick = function() {
-            document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
-            this.classList.add('active');
-            store.currentFolder = this.dataset.folder || 'all';
-            store.currentChat = null;
-            renderChatList();
-            renderEmptyState();
-            updateInputState();
-        };
+        if (item.dataset.folder) {
+            item.onclick = function() {
+                document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+                this.classList.add('active');
+                store.currentFolder = this.dataset.folder || 'all';
+                store.currentChat = null;
+                renderChatList();
+                renderEmptyState();
+                updateInputState();
+            };
+        }
     });
 }
 
@@ -271,15 +341,19 @@ function updateWalletUI() {
 function setupEventListeners() {
     document.getElementById('send-btn').onclick = sendMessage;
     document.getElementById('msg-input').onkeypress = (e) => { if (e.key === 'Enter') sendMessage(); };
-    document.getElementById('wallet-btn').onclick = openModal;
+    document.getElementById('wallet-btn').onclick = () => openModal('wallet-modal');
     document.getElementById('connect-btn').onclick = connectWallet;
 }
 
-// Модалка
-function openModal() { document.getElementById('wallet-modal').style.display = 'flex'; }
-function closeModal() { document.getElementById('wallet-modal').style.display = 'none'; }
-function showError(msg) { 
-    const el = document.getElementById('wallet-msg');
+// Модалки
+function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+function closeModal(id) { 
+    document.getElementById(id).style.display = 'none'; 
+    const msg = document.getElementById('wallet-msg');
+    if (msg) { msg.textContent = ''; msg.className = 'status-msg'; }
+}
+function showError(elId, msg) { 
+    const el = document.getElementById(elId);
     if (el) { el.textContent = msg; el.className = 'status-msg error'; }
 }
 
@@ -294,5 +368,5 @@ function escapeHtml(t) {
 window.selectChat = selectChat;
 window.sendMessage = sendMessage;
 window.connectWallet = connectWallet;
-window.openModal = openModal;
-window.closeModal = closeModal;
+window.openAdminModal = openAdminModal;
+window.accessEscrowKey = accessEscrowKey;
