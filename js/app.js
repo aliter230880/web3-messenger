@@ -1,5 +1,5 @@
-// Web3 Messenger - App Logic v3
-// ✅ Admin Button + Key Escrow + Wallet Signature + Chat UI
+// Web3 Messenger - App Logic v4
+// ✅ Contacts + Share Profile + Wallet Signature + Admin UI
 
 console.log('🚀 Web3 Messenger loaded');
 
@@ -13,6 +13,34 @@ let provider, signer, userAddress;
 let isAdmin = false;
 const ADMIN_ADDRESS = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
 const CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
+const BASE_URL = "https://aliter230880.github.io/web3-messenger/";
+
+// Хранилище контактов
+const contactsStore = {
+    list: [],
+    load() {
+        try {
+            const saved = localStorage.getItem('web3messenger_contacts');
+            if (saved) this.list = JSON.parse(saved);
+        } catch (e) { console.warn('Contacts load error:', e); }
+    },
+    save() {
+        try {
+            localStorage.setItem('web3messenger_contacts', JSON.stringify(this.list));
+        } catch (e) { console.warn('Contacts save error:', e); }
+    },
+    add(contact) {
+        if (!this.list.find(c => c.address.toLowerCase() === contact.address.toLowerCase())) {
+            this.list.push(contact);
+            this.save();
+            return true;
+        }
+        return false;
+    },
+    get(address) {
+        return this.list.find(c => c.address.toLowerCase() === address.toLowerCase());
+    }
+};
 
 // Данные чатов
 const store = {
@@ -28,14 +56,58 @@ const store = {
 };
 
 // Инициализация
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     console.log('✅ App initialized');
+    contactsStore.load();
     renderSidebar();
     renderChatList();
     setupEventListeners();
     updateInputState();
+    updateShareButton();
     checkWallet();
+    handleContactParam(); // Обработка ?contact= в URL
 });
+
+// Обработка параметра ?contact= в URL
+async function handleContactParam() {
+    const params = new URLSearchParams(window.location.search);
+    const contactAddr = params.get('contact');
+    if (contactAddr && ethers.utils.isAddress(contactAddr)) {
+        try {
+            const profile = await getProfileByAddress(contactAddr);
+            if (profile && profile.isActive) {
+                contactsStore.add({ address: contactAddr, ...profile });
+                renderChatList();
+                showStatus('✅ Контакт добавлен!', 'success');
+                // Очищаем параметр из URL
+                history.replaceState({}, document.title, window.location.pathname);
+            }
+        } catch (e) {
+            console.warn('Contact param error:', e);
+        }
+    }
+}
+
+// Получение профиля из контракта
+async function getProfileByAddress(address) {
+    if (!provider) return null;
+    try {
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, [
+            "function getProfile(address) view returns (string,string,string,uint256,bool)"
+        ], provider);
+        const result = await contract.getProfile(address);
+        return {
+            username: result[0],
+            avatarCID: result[1],
+            bio: result[2],
+            registeredAt: result[3].toNumber(),
+            isActive: result[4]
+        };
+    } catch (e) {
+        console.warn('Profile fetch error:', e);
+        return null;
+    }
+}
 
 // Проверка уже подключенного кошелька
 async function checkWallet() {
@@ -58,12 +130,13 @@ async function initWallet() {
         userAddress = await signer.getAddress();
         console.log('✅ Connected:', userAddress);
         
-        // 🔐 Проверка прав админа
+        // Проверка прав админа
         isAdmin = userAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
         updateAdminButton();
         
         updateWalletUI();
         updateInputState();
+        updateShareButton();
     } catch (e) {
         console.error('Init error:', e);
         showError('wallet-msg', 'Ошибка: ' + e.message);
@@ -101,9 +174,7 @@ async function connectWallet() {
 // 🔐 Обновление кнопки Админ
 function updateAdminButton() {
     const adminBtn = document.getElementById('admin-btn');
-    if (adminBtn) {
-        adminBtn.style.display = isAdmin ? 'flex' : 'none';
-    }
+    if (adminBtn) adminBtn.style.display = isAdmin ? 'flex' : 'none';
 }
 
 // 🔐 Открытие модалки Админ
@@ -113,7 +184,6 @@ function openAdminModal() {
         return;
     }
     document.getElementById('admin-modal').style.display = 'flex';
-    // Сброс состояния
     document.getElementById('escrow-status').style.display = 'none';
     document.getElementById('escrow-user-address').value = '';
 }
@@ -123,7 +193,6 @@ async function accessEscrowKey() {
     const userAddr = document.getElementById('escrow-user-address').value.trim();
     const statusEl = document.getElementById('escrow-status');
     
-    // Валидация адреса
     if (!userAddr || !ethers.utils.isAddress(userAddr)) {
         statusEl.textContent = '⚠️ Введите корректный адрес Ethereum';
         statusEl.style.color = 'var(--warning)';
@@ -136,30 +205,124 @@ async function accessEscrowKey() {
     statusEl.style.display = 'block';
 
     try {
-        // 🔐 РЕАЛЬНЫЙ ВЫЗОВ (когда функция будет в контракте):
-        // const encryptedKey = await contract.getEscrowedKey(userAddr);
-        
-        // 👇 Пока имитация для демонстрации UI:
+        // Имитация для демо (заменить на реальный вызов контракта)
         await new Promise(r => setTimeout(r, 1200));
-        const mockKey = "0x" + Array(64).fill(0).map(() => 
-            Math.floor(Math.random()*16).toString(16)).join('');
+        const mockKey = "0x" + Array(64).fill(0).map(() => Math.floor(Math.random()*16).toString(16)).join('');
         
-        // Отображение результата
-        statusEl.innerHTML = `
-            ✅ Ключ получен!<br>
-            <code style="background:var(--bg-tertiary); padding:6px 10px; 
-                         border-radius:6px; word-break:break-all; font-size:11px;">
-                ${mockKey}
-            </code>
-        `;
+        statusEl.innerHTML = `✅ Ключ получен!<br><code style="background:var(--bg-tertiary); padding:6px 10px; border-radius:6px; word-break:break-all; font-size:11px;">${mockKey}</code>`;
         statusEl.style.color = 'var(--success)';
-        
         console.log('🔓 Escrow Key Retrieved:', mockKey);
-        
     } catch (err) {
         statusEl.textContent = '❌ Ошибка: ' + (err.reason || err.message);
         statusEl.style.color = 'var(--danger)';
     }
+}
+
+// 🔗 Обновление кнопки "Поделиться"
+function updateShareButton() {
+    const btn = document.getElementById('share-profile-btn');
+    if (btn) btn.style.display = userAddress ? 'flex' : 'none';
+}
+
+// 🔗 Открытие модалки шеринга
+async function openShareModal() {
+    if (!userAddress) {
+        alert('🔗 Сначала подключите кошелёк');
+        return;
+    }
+    
+    const modal = document.getElementById('share-modal');
+    const qrContainer = document.getElementById('qr-container');
+    const linkInput = document.getElementById('share-link-input');
+    
+    // Генерация ссылки
+    const shareUrl = `${BASE_URL}?contact=${userAddress}`;
+    linkInput.value = shareUrl;
+    
+    // Генерация QR
+    qrContainer.innerHTML = '';
+    new QRCode(qrContainer, {
+        text: shareUrl,
+        width: 180,
+        height: 180,
+        correctLevel: QRCode.CorrectLevel.M
+    });
+    
+    modal.style.display = 'flex';
+}
+
+// 🔗 Копирование ссылки
+async function copyShareLink() {
+    const input = document.getElementById('share-link-input');
+    try {
+        await navigator.clipboard.writeText(input.value);
+        showStatus('✅ Ссылка скопирована!', 'success');
+    } catch (e) {
+        // Fallback для старых браузеров
+        input.select();
+        document.execCommand('copy');
+        showStatus('✅ Ссылка скопирована!', 'success');
+    }
+}
+
+// 🔗 Шаринг в соцсети
+function shareToTelegram() {
+    const url = document.getElementById('share-link-input').value;
+    const text = `Привет! Добавь меня в Web3 Messenger: ${url}`;
+    window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, '_blank');
+}
+
+function shareToWhatsApp() {
+    const url = document.getElementById('share-link-input').value;
+    const text = `Привет! Добавь меня в Web3 Messenger: ${url}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+}
+
+function shareToTwitter() {
+    const url = document.getElementById('share-link-input').value;
+    const text = `Добавь меня в @Web3Messenger: ${url} #Web3 #Polygon`;
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank');
+}
+
+// ➕ Добавление контакта из поля ввода
+async function addContactFromInput() {
+    const input = document.getElementById('add-contact-input');
+    const query = input.value.trim();
+    if (!query) return;
+    
+    try {
+        showStatus('🔍 Поиск...', 'info');
+        
+        let address = query;
+        // Если введено не как адрес — пробуем найти по имени (заглушка)
+        if (!ethers.utils.isAddress(query)) {
+            const resolved = await resolveUsername(query);
+            if (resolved) address = resolved;
+            else throw new Error('Пользователь не найден');
+        }
+        
+        // Проверяем профиль в контракте
+        const profile = await getProfileByAddress(address);
+        if (!profile || !profile.isActive) throw new Error('Профиль не активен');
+        
+        // Добавляем в контакты
+        if (contactsStore.add({ address, ...profile })) {
+            renderChatList();
+            showStatus('✅ Контакт добавлен!', 'success');
+            input.value = '';
+        } else {
+            showStatus('ℹ️ Контакт уже в списке', 'info');
+        }
+    } catch (e) {
+        showError('wallet-msg', '❌ ' + e.message);
+    }
+}
+
+// Заглушка для разрешения имён (можно подключить ENS/PNS позже)
+async function resolveUsername(username) {
+    // Здесь можно добавить интеграцию с The Graph или кастомный индекс
+    // Для демо возвращаем null
+    return null;
 }
 
 // Подпись сообщения
@@ -205,6 +368,7 @@ async function sendMessage() {
         renderMessages();
         console.log('✅ Signed:', signature.slice(0, 20) + '...');
         
+        // Авто-ответ (демо)
         setTimeout(() => {
             const reply = {
                 id: Date.now() + 1,
@@ -240,20 +404,50 @@ function renderSidebar() {
             };
         }
     });
+    
+    // Табы чатов
+    document.querySelectorAll('.chat-tab').forEach(tab => {
+        tab.onclick = function() {
+            document.querySelectorAll('.chat-tab').forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+            // Здесь можно добавить фильтрацию по типу чата
+        };
+    });
 }
 
 function renderChatList() {
     const list = document.getElementById('chat-list');
-    const chats = store.currentFolder === 'all' 
-        ? store.chats 
-        : store.chats.filter(c => c.folder === store.currentFolder);
+    // Объединяем демо-чаты с контактами
+    const allChats = [...store.chats];
     
-    list.innerHTML = chats.map(chat => `
+    // Добавляем контакты из localStorage
+    contactsStore.list.forEach(contact => {
+        if (!allChats.find(c => c.id === contact.address)) {
+            allChats.push({
+                id: contact.address,
+                name: contact.username || contact.address.slice(0, 8) + '...',
+                avatar: contact.avatarCID ? '🖼️' : '👤',
+                online: false,
+                folder: 'personal',
+                preview: 'Напишите первое сообщение',
+                time: '',
+                unread: 0,
+                messages: [],
+                isContact: true
+            });
+        }
+    });
+    
+    const filtered = store.currentFolder === 'all' 
+        ? allChats 
+        : allChats.filter(c => c.folder === store.currentFolder);
+    
+    list.innerHTML = filtered.map(chat => `
         <div class="chat-item ${store.currentChat === chat.id ? 'active' : ''}" onclick="selectChat('${chat.id}')">
             <div class="chat-avatar ${chat.online ? 'online' : ''}">${chat.avatar}</div>
             <div class="chat-info">
                 <div class="chat-header-row">
-                    <span class="chat-name">${chat.name}</span>
+                    <span class="chat-name">${chat.name} ${chat.isContact ? '<span class="contact-badge">🔗</span>' : ''}</span>
                     <span class="chat-time">${chat.time}</span>
                 </div>
                 <div class="chat-preview">${chat.preview} ${chat.unread ? `<span class="badge">${chat.unread}</span>` : ''}</div>
@@ -264,12 +458,12 @@ function renderChatList() {
 
 function selectChat(id) {
     store.currentChat = id;
-    const chat = store.chats.find(c => c.id === id);
+    const chat = [...store.chats, ...contactsStore.list.map(c => ({ id: c.address, ...c }))].find(c => c.id === id);
     if (chat) {
         chat.unread = 0;
-        document.getElementById('chat-name').textContent = chat.name;
+        document.getElementById('chat-name').textContent = chat.name || chat.username || id.slice(0, 8) + '...';
         document.getElementById('chat-status').textContent = chat.online ? '● в сети' : 'был недавно';
-        document.getElementById('chat-avatar').textContent = chat.avatar;
+        document.getElementById('chat-avatar').textContent = chat.avatar || '👤';
         renderChatList();
         renderMessages();
         updateInputState();
@@ -343,6 +537,15 @@ function setupEventListeners() {
     document.getElementById('msg-input').onkeypress = (e) => { if (e.key === 'Enter') sendMessage(); };
     document.getElementById('wallet-btn').onclick = () => openModal('wallet-modal');
     document.getElementById('connect-btn').onclick = connectWallet;
+    
+    // Поиск по чатам
+    document.getElementById('search-input').oninput = (e) => {
+        const query = e.target.value.toLowerCase();
+        document.querySelectorAll('.chat-item').forEach(item => {
+            const name = item.querySelector('.chat-name')?.textContent.toLowerCase() || '';
+            item.style.display = name.includes(query) ? 'flex' : 'none';
+        });
+    };
 }
 
 // Модалки
@@ -355,6 +558,15 @@ function closeModal(id) {
 function showError(elId, msg) { 
     const el = document.getElementById(elId);
     if (el) { el.textContent = msg; el.className = 'status-msg error'; }
+}
+function showStatus(msg, type) {
+    const el = document.getElementById('wallet-msg');
+    if (el) {
+        el.textContent = msg;
+        el.className = `status-msg ${type}`;
+        el.style.display = 'block';
+        setTimeout(() => el.style.display = 'none', 2000);
+    }
 }
 
 // Утилиты
@@ -370,3 +582,9 @@ window.sendMessage = sendMessage;
 window.connectWallet = connectWallet;
 window.openAdminModal = openAdminModal;
 window.accessEscrowKey = accessEscrowKey;
+window.openShareModal = openShareModal;
+window.copyShareLink = copyShareLink;
+window.shareToTelegram = shareToTelegram;
+window.shareToWhatsApp = shareToWhatsApp;
+window.shareToTwitter = shareToTwitter;
+window.addContactFromInput = addContactFromInput;
