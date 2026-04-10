@@ -5,11 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Web3 Messenger • Polygon</title>
   <link rel="stylesheet" href="css/style.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💬</text></svg>">
+  <!-- 🔗 Web3: Ethers.js для работы с блокчейном -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 </head>
 <body>
   <div class="app-container">
-    <!-- ========== LEFT SIDEBAR (FOLDERS) ========== -->
+    
+    <!-- ========== ЛЕВЫЙ САЙДБАР (ПАПКИ) ========== -->
     <aside class="sidebar">
       <div class="sidebar-item active" data-folder="all">
         <span>💬</span><span>Все</span><span class="sidebar-badge">147</span>
@@ -23,30 +25,38 @@
       <div class="sidebar-item" data-folder="work">
         <span>💼</span><span>Работа</span><span class="sidebar-badge">38</span>
       </div>
-      <div class="sidebar-item" style="margin-top: auto;" id="wallet-sidebar">
+      
+      <!-- 🔗 КНОПКА ПОДКЛЮЧЕНИЯ КОШЕЛЬКА (id="wallet-sidebar" — ВАЖНО!) -->
+      <div class="sidebar-item" id="wallet-sidebar" style="margin-top:auto;cursor:pointer;">
         <span>🦊</span><span>Подключить</span>
       </div>
+      
+      <!-- 🛡️ АДМИН-КНОПКА (появляется только для владельца) -->
+      <div class="sidebar-item" id="admin-btn" style="display:none;cursor:pointer;">
+        <span>🛡️</span><span>Админ</span>
+      </div>
     </aside>
-
-    <!-- ========== CHAT LIST PANEL ========== -->
+    
+    <!-- ========== ЦЕНТРАЛЬНАЯ ПАНЕЛЬ (СПИСОК ЧАТОВ) ========== -->
     <div class="chat-panel">
       <div class="chat-header">
         <div class="search-box">
           <span>🔍</span>
-          <input type="text" placeholder="Search" id="search-input">
+          <input type="text" placeholder="Поиск..." id="search-input">
         </div>
         <div class="chat-tabs">
-          <div class="chat-tab active" data-tab="all">Все</div>
-          <div class="chat-tab" data-tab="unread">Непрочитанные</div>
-          <div class="chat-tab" data-tab="vip">VIP</div>
+          <div class="chat-tab active" data-filter="all">Все</div>
+          <div class="chat-tab" data-filter="unread">Непрочитанные</div>
+          <div class="chat-tab" data-filter="vip">VIP</div>
         </div>
       </div>
+      
       <div class="chat-list" id="chat-list">
-        <!-- Chats rendered by JavaScript -->
+        <!-- Чаты рендерятся через JavaScript -->
       </div>
     </div>
-
-    <!-- ========== MAIN CHAT AREA ========== -->
+    
+    <!-- ========== ПРАВАЯ ПАНЕЛЬ (ОКНО ЧАТА) ========== -->
     <main class="chat-area">
       <div class="chat-top-bar">
         <div class="chat-top-avatar" id="chat-avatar">👤</div>
@@ -55,63 +65,83 @@
           <div class="chat-top-status" id="chat-status">—</div>
         </div>
         <div class="encryption-badge" title="End-to-End шифрование">🔐 E2E</div>
-        <button id="admin-btn" class="admin-btn" style="display:none;" title="Админ-панель" onclick="openAdminModal()">🛡️</button>
       </div>
-
+      
       <div class="messages-container" id="messages-container">
+        <!-- Пустое состояние по умолчанию -->
         <div class="empty-state" id="empty-state">
           <div class="empty-state-icon">💬</div>
           <h3>Добро пожаловать в Web3 Messenger</h3>
-          <p>Подключи кошелёк и выбери чат, чтобы начать.</p>
-          <p style="margin-top:12px;font-size:12px;color:var(--text-muted);">🔒 Все сообщения зашифрованы</p>
-        </div>
-
-        <!-- Registration Modal (hidden by default) -->
-        <div id="register-modal" style="display:none;">
-          <div class="modal-content">
-            <h3>🆔 Регистрация профиля</h3>
-            <p>Создай свой ончейн-профиль в Polygon. Это бесплатно (газ ~$0.02).</p>
-            <input type="text" id="reg-username" placeholder="Никнейм (уникальный)" maxlength="30">
-            <input type="text" id="reg-avatar" placeholder="Avatar CID (Qm...)">
-            <textarea id="reg-bio" placeholder="О себе (необязательно)" rows="2"></textarea>
-            <button id="btn-register" class="btn btn-send">Зарегистрировать в блокчейне</button>
-            <p id="reg-status" class="status-text"></p>
-          </div>
+          <p>Выберите чат слева, чтобы начать общение</p>
+          <p style="margin-top:12px;font-size:12px;color:var(--text-muted);">
+            🔒 Все сообщения зашифрованы
+          </p>
         </div>
       </div>
-
+      
       <div class="input-container">
         <button class="icon-btn" title="Прикрепить" onclick="alert('📎 Загрузка: шифрование + IPFS')">📎</button>
         <div class="input-wrapper">
           <input type="text" placeholder="Выберите чат..." disabled id="msg-input">
           <button class="icon-btn" title="Эмодзи" onclick="alert('😊 Эмодзи-панель')">😊</button>
         </div>
-        <button class="btn-donate" title="Отправить донат" onclick="alert('💰 Донаты: в разработке')">💰</button>
         <button class="send-btn" disabled title="Отправить" id="send-btn">➤</button>
       </div>
     </main>
+    
   </div>
-
-  <!-- ========== ADMIN MODAL (Key Escrow) ========== -->
-  <div id="admin-modal" class="modal-overlay" style="display:none;">
-    <div class="modal-content admin-modal">
-      <h3>🛡️ Админ-панель: Key Escrow</h3>
+  
+  <!-- ========== МОДАЛКА: РЕГИСТРАЦИЯ ПРОФИЛЯ ========== -->
+  <div id="register-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <h3>🆔 Регистрация профиля</h3>
       <p style="color:var(--text-secondary);margin-bottom:16px;">
-        Доступ только для владельца платформы. Введите адрес пользователя для извлечения зашифрованного мастер-ключа.
+        Создай ончейн-профиль в Polygon. Это бесплатно (газ ~$0.02).
       </p>
-      <input type="text" id="escrow-user-address" placeholder="0x... адрес пользователя">
-      <button id="btn-access-escrow" class="btn btn-send">🔓 Получить доступ к ключу</button>
-      <div id="escrow-status" class="status-text" style="display:none;"></div>
-      <button class="btn" style="margin-top:16px;background:var(--bg-tertiary);" onclick="document.getElementById('admin-modal').style.display='none'">Закрыть</button>
+      
+      <input type="text" id="reg-username" placeholder="Никнейм (уникальный)" 
+             style="width:100%;padding:12px;margin-bottom:12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-primary);">
+      
+      <input type="text" id="reg-avatar" placeholder="Avatar CID (Qm...) — необязательно" 
+             style="width:100%;padding:12px;margin-bottom:12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-primary);">
+      
+      <textarea id="reg-bio" placeholder="О себе (необязательно)" rows="3"
+                style="width:100%;padding:12px;margin-bottom:16px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-primary);resize:none;"></textarea>
+      
+      <button id="btn-register" class="btn btn-send" style="width:100%;">
+        Зарегистрировать в блокчейне
+      </button>
+      
+      <p id="reg-status" style="margin-top:12px;font-size:12px;text-align:center;color:var(--text-muted);"></p>
     </div>
   </div>
-
-  <!-- ========== WEB3 LIBRARIES ========== -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@xmtp/xmtp-js@11.3.0/dist/bundle.iife.js"></script>
   
-  <!-- ========== APP LOGIC ========== -->
-  <script src="js/xmtp.js"></script>
+  <!-- ========== МОДАЛКА: АДМИН-ПАНЕЛЬ (KEY ESCROW) ========== -->
+  <div id="admin-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <h3>🛡️ Админ-панель: Key Escrow</h3>
+      <p style="color:var(--text-secondary);margin-bottom:16px;">
+        Доступ только для владельца платформы. Введите адрес для извлечения зашифрованного мастер-ключа.
+      </p>
+      
+      <input type="text" id="escrow-user-address" placeholder="0xАдресПользователя..." 
+             style="width:100%;padding:12px;margin-bottom:16px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-primary);font-family:monospace;">
+      
+      <button id="btn-access-escrow" class="btn btn-send" style="width:100%;">
+        🔓 Получить доступ к ключу
+      </button>
+      
+      <p id="escrow-status" style="margin-top:12px;font-size:12px;text-align:center;color:var(--text-muted);display:none;"></p>
+      
+      <button onclick="document.getElementById('admin-modal').style.display='none'" 
+              style="margin-top:16px;width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-primary);cursor:pointer;">
+        Закрыть
+      </button>
+    </div>
+  </div>
+  
+  <!-- ========== ПОДКЛЮЧЕНИЕ ЛОГИКИ ========== -->
   <script src="js/app.js"></script>
+  
 </body>
 </html>
