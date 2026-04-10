@@ -5,10 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web3 Messenger</title>
     <link rel="stylesheet" href="css/style.css">
-    <!-- ✅ РАБОЧИЙ CDN для ethers.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" integrity="sha512-R6zRb4uEXY1Vd5K6E1g3x8F7h5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K......" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <!-- Заглушка для фавикона -->
-    <link rel="icon" href="data:,">
+    <link rel="icon" href=",">
 </head>
 <body>
     <div class="app-container">
@@ -28,6 +26,10 @@
             </div>
             <div class="sidebar-item" style="margin-top: auto;" id="wallet-btn">
                 <span>🦊</span><span>Подключить</span>
+            </div>
+            <!-- 🔐 Кнопка Админ (появляется только для владельца) -->
+            <div class="sidebar-item" id="admin-btn" style="display:none;" onclick="openAdminModal()">
+                <span>🛡️</span><span>Админ</span>
             </div>
         </aside>
 
@@ -81,7 +83,25 @@
             <p>Для отправки сообщений нужен MetaMask</p>
             <button id="connect-btn" class="btn-primary">Подключить MetaMask</button>
             <p id="wallet-msg" class="status-msg"></p>
-            <button class="btn-secondary" onclick="closeModal()">Закрыть</button>
+            <button class="btn-secondary" onclick="closeModal('wallet-modal')">Закрыть</button>
+        </div>
+    </div>
+
+    <!-- 🔐 Admin Modal: Key Escrow -->
+    <div id="admin-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <h3>🛡️ Админ-панель: Key Escrow</h3>
+            <p>Доступ только для владельца. Введите адрес пользователя для извлечения зашифрованного мастер-ключа.</p>
+            
+            <input type="text" id="escrow-user-address" placeholder="0x..." class="input-field">
+            
+            <button id="btn-access-escrow" class="btn-primary" onclick="accessEscrowKey()">
+                🔓 Получить доступ к ключу
+            </button>
+            
+            <div id="escrow-status" class="status-msg" style="display:none;"></div>
+            
+            <button class="btn-secondary" onclick="closeModal('admin-modal')">Закрыть</button>
         </div>
     </div>
 
