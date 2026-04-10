@@ -1,191 +1,106 @@
-// Web3 Messenger - Full Integration (Chat + Blockchain)
-// (c) Dima's Web3 Project • Polygon Mainnet
+// Web3 Messenger - Application Logic v3 (FIXED)
+// (c) Dima's Web3 Project
 console.log('🚀 Web3 Messenger loaded');
 
-// ========== ГЛОБАЛЬНОЕ ХРАНИЛИЩЕ ==========
-window.store = {
+// ========== DATA STORE ==========
+const store = {
   currentChat: null,
   currentFolder: 'all',
+  currentUser: null, // Для Web3
   chats: [
-    { id: 'dima', name: 'Дима', avatar: '👤', online: true, folder: 'personal', preview: 'Привет! Как архитектура проекта?', time: '12:30', unread: 3, messages: [{ id: 1, text: 'Привет! Как проект? Готов смотреть архитектуру?', sent: false, time: '12:28', status: 'delivered' }] },
-    { id: 'ai', name: 'AI Assistant', avatar: '🤖', online: true, folder: 'work', preview: 'Готов помочь с кодом', time: '11:45', unread: 0, messages: [] },
-    { id: 'crypto', name: 'Crypto News', avatar: '📢', online: false, folder: 'news', preview: 'Bitcoin пробил $100k!', time: '10:20', unread: 24, messages: [] }
+    {
+      id: 'dima',
+      name: 'Дима',
+      avatar: '👤',
+      online: true,
+      folder: 'personal',
+      preview: 'Привет! Как архитектура проекта?',
+      time: '12:30',
+      unread: 3,
+      messages: [
+        { id: 1, text: 'Привет! Как проект? Готов смотреть архитектуру?', sent: false, time: '12:28', status: 'delivered' },
+        { id: 2, text: 'Всё супер! Смотри, что набросал 👇', sent: true, time: '12:30', status: 'delivered' }
+      ]
+    },
+    {
+      id: 'ai',
+      name: 'AI Assistant',
+      avatar: '🤖',
+      online: true,
+      folder: 'work',
+      preview: 'Готов помочь с кодом',
+      time: '11:45',
+      unread: 0,
+      messages: [
+        { id: 1, text: 'Привет! Чем могу помочь?', sent: false, time: '11:45', status: 'delivered' }
+      ]
+    },
+    {
+      id: 'crypto',
+      name: 'Crypto News',
+      avatar: '📢',
+      online: false,
+      folder: 'news',
+      preview: 'Bitcoin пробил $100k!',
+      time: '10:20',
+      unread: 24,
+      messages: [
+        { id: 1, text: '🚀 Bitcoin пробил $100k! Полный разбор ситуации...', sent: false, time: '10:20', status: 'delivered' }
+      ]
+    }
   ]
 };
 
-// ========== WEB3 КОНФИГУРАЦИЯ ==========
-const CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
-const CHAIN_ID = 137; // Polygon Mainnet
-const ABI = [
-  "function isRegistered(address user) view returns (bool)",
-  "function registerProfile(string username, string avatarCID, string bio) external",
-  "function getProfile(address user) view returns (string, string, string, uint256, bool)"
-];
-
-let provider, signer, contract, userAddress;
-let isRegistered = false;
-
-// ========== ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ==========
+// ========== INIT ==========
 document.addEventListener('DOMContentLoaded', () => {
   console.log('✅ App initialized');
   renderSidebar();
   renderChatList();
-  setupEventListeners();
+  setupEventListeners(); // ← Теперь эта функция определена ниже!
   updateInputState();
-  
-  // Кнопка кошелька в сайдбаре
-  document.getElementById('wallet-sidebar').addEventListener('click', connectWallet);
 });
 
-// ========== WEB3 ЛОГИКА ==========
-async function connectWallet() {
-  const btn = document.getElementById('wallet-sidebar');
-  if (!window.ethereum) {
-    alert('🦊 Установите MetaMask или другой Web3-кошелёк!');
-    return;
-  }
-  try {
-    btn.innerHTML = '<span>⏳</span><span>Подключение...</span>';
-    provider = new ethers.providers.Web3Provider(window.ethereum);
-    await provider.send('eth_requestAccounts', []);
-    signer = provider.getSigner();
-    userAddress = await signer.getAddress();
-    
-    // Проверка сети
-    const network = await provider.getNetwork();
-    if (network.chainId !== CHAIN_ID) {
-      btn.innerHTML = '<span>🔄</span><span>Смена сети...</span>';
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: ethers.utils.hexValue(CHAIN_ID) }]
-      });
-    }
-    
-    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
-    btn.innerHTML = `<span>✅</span><span>${userAddress.slice(0,6)}...${userAddress.slice(-4)}</span>`;
-    
-    // Проверка регистрации
-    await checkRegistration();
-    console.log('✅ Кошелёк подключен:', userAddress);
-  } catch (err) {
-    console.error('❌ Ошибка подключения:', err);
-    btn.innerHTML = '<span>🦊</span><span>Подключить</span>';
-    alert('Не удалось подключиться: ' + (err.reason || err.message));
-  }
-}
-
-async function checkRegistration() {
-  if (!contract) return;
-  try {
-    isRegistered = await contract.isRegistered(userAddress);
-    const emptyState = document.getElementById('empty-state');
-    const modal = document.getElementById('register-modal');
-    
-    if (isRegistered) {
-      const profile = await contract.getProfile(userAddress);
-      emptyState.innerHTML = `
-        <div class="empty-state-icon">✅</div>
-        <h3>Профиль активен</h3>
-        <p>Ник: <strong>${profile[0]}</strong></p>
-        <p style="margin-top:8px; color:var(--success);">Готов к общению в блокчейне</p>
-      `;
-      modal.style.display = 'none';
-      enableChatInput();
-    } else {
-      emptyState.innerHTML = `
-        <div class="empty-state-icon">📝</div>
-        <h3>Требуется регистрация</h3>
-        <p>Создайте профиль, чтобы получить доступ к мессенджеру.</p>
-      `;
-      modal.style.display = 'flex';
-      disableChatInput();
-    }
-  } catch (err) {
-    console.error('❌ Ошибка проверки:', err);
-  }
-}
-
-async function registerProfile() {
-  const username = document.getElementById('reg-username').value.trim();
-  const avatarCID = document.getElementById('reg-avatar').value.trim();
-  const bio = document.getElementById('reg-bio').value.trim();
-  const statusEl = document.getElementById('reg-status');
-  const btn = document.getElementById('btn-register');
-  
-  if (!username || !avatarCID) {
-    statusEl.textContent = '⚠️ Заполните ник и Avatar CID';
-    statusEl.style.color = 'var(--warning)';
-    return;
-  }
-  
-  try {
-    btn.disabled = true;
-    btn.textContent = '⏳ Подписание...';
-    statusEl.textContent = 'Подтвердите транзакцию в MetaMask';
-    statusEl.style.color = 'var(--text-muted)';
-    
-    const tx = await contract.registerProfile(username, avatarCID, bio);
-    statusEl.textContent = '⛓️ Ожидание подтверждения сети...';
-    
-    await tx.wait();
-    
-    statusEl.textContent = '✅ Профиль создан!';
-    statusEl.style.color = 'var(--success)';
-    isRegistered = true;
-    
-    setTimeout(() => {
-      document.getElementById('register-modal').style.display = 'none';
-      checkRegistration();
-    }, 1200);
-  } catch (err) {
-    console.error('❌ Ошибка регистрации:', err);
-    statusEl.textContent = '❌ ' + (err.reason || err.message || 'Транзакция отклонена');
-    statusEl.style.color = 'var(--danger)';
-    btn.disabled = false;
-    btn.textContent = 'Зарегистрировать';
-  }
-}
-
-// ========== UI ЛОГИКА ==========
-function enableChatInput() {
-  const input = document.getElementById('msg-input');
-  const sendBtn = document.getElementById('send-btn');
-  if (input) { input.disabled = false; input.placeholder = 'Написать сообщение...'; input.focus(); }
-  if (sendBtn) sendBtn.disabled = false;
-}
-
-function disableChatInput() {
-  const input = document.getElementById('msg-input');
-  const sendBtn = document.getElementById('send-btn');
-  if (input) { input.disabled = true; input.placeholder = 'Сначала зарегистрируйтесь...'; }
-  if (sendBtn) sendBtn.disabled = true;
-}
-
+// ========== SIDEBAR & FOLDERS ==========
 function renderSidebar() {
-  document.querySelectorAll('.sidebar-item[data-folder]').forEach(item => {
+  const sidebarItems = document.querySelectorAll('.sidebar-item');
+  sidebarItems.forEach(item => {
     item.addEventListener('click', function() {
-      document.querySelectorAll('.sidebar-item[data-folder]').forEach(i => i.classList.remove('active'));
+      sidebarItems.forEach(i => i.classList.remove('active'));
       this.classList.add('active');
-      window.store.currentFolder = this.dataset.folder;
+      const folder = this.dataset.folder || 'all';
+      store.currentFolder = folder;
       renderChatList();
-      if (window.store.currentChat) {
-        window.store.currentChat = null;
-        document.getElementById('empty-state').style.display = 'flex';
-        disableChatInput();
+      if (store.currentChat) {
+        store.currentChat = null;
+        renderEmptyState();
+        updateInputState();
       }
     });
   });
 }
 
+function getFilteredChats() {
+  if (store.currentFolder === 'all') return store.chats;
+  return store.chats.filter(chat => chat.folder === store.currentFolder);
+}
+
+// ========== CHAT LIST ==========
 function renderChatList() {
-  const list = document.getElementById('chat-list');
-  if (!list) return;
-  const filtered = window.store.currentFolder === 'all' 
-    ? window.store.chats 
-    : window.store.chats.filter(c => c.folder === window.store.currentFolder);
-    
-  list.innerHTML = filtered.map(chat => `
-    <div class="chat-item ${window.store.currentChat === chat.id ? 'active' : ''}" onclick="selectChat('${chat.id}')">
+  const chatList = document.querySelector('.chat-list');
+  if (!chatList) return;
+  const filteredChats = getFilteredChats();
+  if (filteredChats.length === 0) {
+    chatList.innerHTML = `
+      <div style="padding: 20px; text-align: center; color: var(--text-muted);">
+        <div style="font-size: 32px; margin-bottom: 10px;">📭</div>
+        <p>Нет чатов в этой папке</p>
+      </div>`;
+    return;
+  }
+  chatList.innerHTML = filteredChats.map(chat => `
+    <div class="chat-item ${store.currentChat === chat.id ? 'active' : ''}" 
+         data-chat-id="${chat.id}" 
+         onclick="selectChat('${chat.id}')">
       <div class="chat-avatar ${chat.online ? 'online' : ''}">${chat.avatar}</div>
       <div class="chat-info">
         <div class="chat-header-row">
@@ -197,63 +112,153 @@ function renderChatList() {
           ${chat.unread > 0 ? `<span class="unread-badge">${chat.unread}</span>` : ''}
         </div>
       </div>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
+// ========== SELECT CHAT ==========
 function selectChat(chatId) {
-  window.store.currentChat = chatId;
-  const chat = window.store.chats.find(c => c.id === chatId);
+  store.currentChat = chatId;
+  const chat = store.chats.find(c => c.id === chatId);
   if (chat) {
     chat.unread = 0;
     renderChatList();
-    document.getElementById('empty-state').style.display = 'none';
-    document.getElementById('chat-name').textContent = chat.name;
-    document.getElementById('chat-status').textContent = chat.online ? 'в сети • 🔐 E2E' : 'был(а) недавно';
-    if (isRegistered) enableChatInput();
+    renderMessages();
+    updateChatHeader(chat);
+    updateInputState();
   }
 }
 
-document.getElementById('send-btn').addEventListener('click', () => {
-  const input = document.getElementById('msg-input');
-  const text = input.value.trim();
-  if (!text || !window.store.currentChat) return;
-  
-  const chat = window.store.chats.find(c => c.id === window.store.currentChat);
-  const time = new Date().toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
-  const msg = document.createElement('div');
-  msg.className = 'message sent';
-  msg.innerHTML = `<div class="message-text">${text}</div><div class="message-meta">${time} ✓✓</div>`;
-  document.getElementById('messages-container').appendChild(msg);
-  input.value = '';
-  document.getElementById('messages-container').scrollTop = document.getElementById('messages-container').scrollHeight;
-  
-  // Авто-ответ для демо
-  setTimeout(() => {
-    const reply = document.createElement('div');
-    reply.className = 'message received';
-    reply.innerHTML = `<div class="message-text">Отлично! Продолжаем кодить 💪</div><div class="message-meta">${new Date().toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'})} ✓✓</div>`;
-    document.getElementById('messages-container').appendChild(reply);
-    document.getElementById('messages-container').scrollTop = document.getElementById('messages-container').scrollHeight;
-  }, 1500);
-});
+// ========== MESSAGES ==========
+function renderMessages() {
+  const container = document.querySelector('.messages-container');
+  const chat = store.chats.find(c => c.id === store.currentChat);
+  if (!container || !chat) return;
+  container.innerHTML = `
+    <div class="date-separator"><span>Сегодня</span></div>
+    ${chat.messages.map(msg => `
+      <div class="message ${msg.sent ? 'sent' : 'received'}">
+        <div class="message-text">${escapeHtml(msg.text)}</div>
+        <div class="message-meta">
+          <span>${msg.time}</span>
+          ${msg.sent ? `<span class="status-icon">${msg.status === 'delivered' ? '✓✓' : '✓'}</span>` : ''}
+        </div>
+      </div>`).join('')}
+  `;
+  container.scrollTop = container.scrollHeight;
+}
 
+function renderEmptyState() {
+  const container = document.querySelector('.messages-container');
+  if (container) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">💬</div>
+        <h3>Добро пожаловать в Web3 Messenger</h3>
+        <p>Выберите чат слева, чтобы начать общение</p>
+        <p style="margin-top: 12px; font-size: 12px; color: var(--text-muted);">🔒 Все сообщения зашифрованы</p>
+      </div>`;
+  }
+}
+
+function updateChatHeader(chat) {
+  const nameEl = document.querySelector('.chat-top-name');
+  const statusEl = document.querySelector('.chat-top-status');
+  const avatarEl = document.querySelector('.chat-top-avatar');
+  if (nameEl) nameEl.textContent = chat.name;
+  if (statusEl) {
+    statusEl.innerHTML = chat.online 
+      ? '<span style="color:var(--success)">●</span> в сети' 
+      : 'был(а) недавно';
+  }
+  if (avatarEl) avatarEl.textContent = chat.avatar;
+}
+
+// ========== INPUT STATE ==========
 function updateInputState() {
-  const input = document.getElementById('msg-input');
-  const sendBtn = document.getElementById('send-btn');
+  const input = document.querySelector('.input-wrapper input');
+  const sendBtn = document.querySelector('.send-btn');
   if (input && sendBtn) {
-    if (window.store.currentChat && isRegistered) {
-      input.disabled = false; input.placeholder = 'Написать сообщение...';
+    if (store.currentChat) {
+      input.disabled = false;
       sendBtn.disabled = false;
+      input.placeholder = 'Написать сообщение...';
+      input.focus();
     } else {
-      input.disabled = true; input.placeholder = 'Сначала зарегистрируйтесь...';
+      input.disabled = true;
       sendBtn.disabled = true;
+      input.placeholder = 'Выберите чат...';
     }
   }
 }
 
-// Кнопка регистрации в модалке
-document.getElementById('btn-register').addEventListener('click', registerProfile);
+// ========== SEND MESSAGE ==========
+function sendMessage() {
+  const input = document.querySelector('.input-wrapper input');
+  const text = input.value.trim();
+  if (!text || !store.currentChat) return;
+  const chat = store.chats.find(c => c.id === store.currentChat);
+  const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  const newMessage = { id: Date.now(), text, sent: true, time, status: 'sent' };
+  chat.messages.push(newMessage);
+  chat.preview = text;
+  chat.time = time;
+  input.value = '';
+  renderMessages();
+  renderChatList();
+  setTimeout(() => { newMessage.status = 'delivered'; renderMessages(); }, 800);
+  setTimeout(() => {
+    const replies = ['Отлично! Продолжаем 🔥', 'Принято 👍', 'Интересно, давай обсудим'];
+    const reply = { id: Date.now()+1, text: replies[Math.floor(Math.random()*replies.length)], sent: false, time: new Date().toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'}), status: 'delivered' };
+    chat.messages.push(reply);
+    chat.preview = reply.text;
+    chat.time = reply.time;
+    if (store.currentChat === chat.id) renderMessages();
+    renderChatList();
+  }, 2500);
+  console.log('📤 Sent:', text);
+}
 
-// Глобальные функции для onclick в HTML
+// ========== EVENT LISTENERS ← ЭТА ФУНКЦИЯ БЫЛА ПРОПУЩЕНА! ==========
+function setupEventListeners() {
+  const sendBtn = document.querySelector('.send-btn');
+  const msgInput = document.querySelector('.input-wrapper input');
+  
+  if (sendBtn) sendBtn.addEventListener('click', sendMessage);
+  if (msgInput) {
+    msgInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
+  }
+  
+  // Обработка кнопки кошелька в сайдбаре
+  const walletBtn = document.querySelector('.sidebar-item[onclick*="Wallet"]');
+  if (walletBtn) {
+    walletBtn.onclick = function() {
+      if (typeof window.ethereum !== 'undefined') {
+        alert('🦊 MetaMask найден! Интеграция в разработке...');
+      } else {
+        alert('⚠️ Установите MetaMask для работы с Web3-функциями');
+      }
+    };
+  }
+  
+  // Фильтрация по табам чатов
+  const chatTabs = document.querySelectorAll('.chat-tab');
+  chatTabs.forEach(tab => {
+    tab.addEventListener('click', function() {
+      chatTabs.forEach(t => t.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+}
+
+// ========== UTILS ==========
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// ========== GLOBAL EXPORTS ==========
 window.selectChat = selectChat;
+window.sendMessage = sendMessage;
