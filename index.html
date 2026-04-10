@@ -5,96 +5,98 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Web3 Messenger</title>
   <link rel="stylesheet" href="css/style.css">
-  <!-- Ethers.js для работы с блокчейном -->
+  
+  <!-- 🔗 WEB3: Библиотека для работы с блокчейном (Ethers.js v5) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 </head>
 <body>
-  <div class="app-container">
-    <!-- Left Sidebar -->
-    <aside class="sidebar">
-      <div class="sidebar-item active" data-folder="all">
-        <span>💬</span><span>Все</span><span class="sidebar-badge">147</span>
-      </div>
-      <div class="sidebar-item" data-folder="personal">
-        <span>👤</span><span>Личное</span>
-      </div>
-      <div class="sidebar-item" data-folder="news">
-        <span>📰</span><span>Новости</span><span class="sidebar-badge">11</span>
-      </div>
-      <div class="sidebar-item" data-folder="work">
-        <span>💼</span><span>Работа</span><span class="sidebar-badge">38</span>
-      </div>
-      <div class="sidebar-item" id="wallet-btn">
-        <span>🦊</span><span>Подключить</span>
-      </div>
-      <!-- 🔐 Кнопка админ-панели (скрыта до подключения кошелька) -->
-      <div class="sidebar-item" id="admin-btn" style="display:none; opacity:0.7;" title="Только для владельца">
-        <span>🛡️</span><span>Админ</span>
-      </div>
-    </aside>
 
-    <!-- Chat List Panel -->
-    <div class="chat-panel">
-      <div class="chat-header">
-        <div class="search-box">
-          <span>🔍</span><input type="text" placeholder="Search" id="search-input">
-        </div>
-        <div class="chat-tabs">
-          <div class="chat-tab active">Все</div>
-          <div class="chat-tab">Непрочитанные</div>
-          <div class="chat-tab">VIP</div>
-        </div>
-      </div>
-      <div class="chat-list" id="chat-list"></div>
+<div class="app-container">
+  
+  <!-- ========== SIDEBAR (ПАПКИ) ========== -->
+  <aside class="sidebar">
+    <div class="sidebar-item active" data-folder="all">
+      <span>💬</span><span>Все</span><span class="sidebar-badge">147</span>
     </div>
+    <div class="sidebar-item" data-folder="personal">
+      <span>👤</span><span>Личное</span>
+    </div>
+    <div class="sidebar-item" data-folder="news">
+      <span>📰</span><span>Новости</span><span class="sidebar-badge">11</span>
+    </div>
+    <div class="sidebar-item" data-folder="work">
+      <span>💼</span><span>Работа</span><span class="sidebar-badge">38</span>
+    </div>
+    
+    <!-- Кнопка кошелька в сайдбаре -->
+    <div class="sidebar-item" style="margin-top: auto;" id="wallet-btn" onclick="connectWallet()">
+      <span>🦊</span><span id="wallet-text">Подключить</span>
+    </div>
+  </aside>
 
-    <!-- Main Chat Area -->
-    <main class="chat-area">
-      <div class="chat-top-bar">
-        <div class="chat-top-avatar">👤</div>
-        <div class="chat-top-info">
-          <div class="chat-top-name" id="chat-name">Выберите чат</div>
-          <div class="chat-top-status" id="chat-status">—</div>
-        </div>
-        <div class="encryption-badge">🔐 E2E</div>
+  <!-- ========== CHAT LIST (СПИСОК) ========== -->
+  <div class="chat-panel">
+    <div class="chat-header">
+      <div class="search-box">
+        <span>🔍</span><input type="text" placeholder="Search">
       </div>
-      <div class="messages-container" id="messages-container">
-        <div class="empty-state" id="empty-state">
-          <div class="empty-state-icon">💬</div>
-          <h3>Добро пожаловать в Web3 Messenger</h3>
-          <p>Выберите чат слева, чтобы начать общение</p>
-          <p style="margin-top:12px; font-size:12px; color:var(--text-muted);">🔒 Все сообщения зашифрованы</p>
-        </div>
+      <div class="chat-tabs">
+        <div class="chat-tab active">Все</div>
+        <div class="chat-tab">Непрочитанные</div>
       </div>
-      <div class="input-container">
-        <button class="icon-btn" title="Прикрепить">📎</button>
-        <div class="input-wrapper">
-          <input type="text" placeholder="Написать сообщение..." disabled id="msg-input">
-          <button class="icon-btn" title="Эмодзи">😊</button>
-        </div>
-        <button class="send-btn" disabled id="send-btn">➤</button>
-      </div>
-    </main>
-  </div>
-
-  <!-- 🔐 Модальное окно Key Escrow (Админ-панель) -->
-  <div id="admin-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center; backdrop-filter:blur(4px);">
-    <div style="background:var(--bg-secondary); padding:28px; border-radius:16px; max-width:480px; width:90%; border:1px solid var(--border);">
-      <h3 style="margin-bottom:16px; display:flex; align-items:center; gap:8px; color:var(--warning);">🛡️ Админ-панель: Key Escrow</h3>
-      <p style="font-size:13px; color:var(--text-secondary); margin-bottom:16px;">
-        Доступ только для владельца платформы. Введите адрес пользователя для извлечения зашифрованного мастер-ключа.
-      </p>
-      <input type="text" id="escrow-user-address" placeholder="0x... (адрес пользователя)" style="width:100%; padding:10px; margin-bottom:12px; border-radius:8px; border:1px solid var(--border); background:var(--bg-tertiary); color:var(--text-primary);">
-      <button id="btn-access-escrow" style="width:100%; padding:12px; border-radius:8px; border:none; background:var(--danger); color:white; cursor:pointer; font-weight:600; margin-bottom:8px;">
-        🔓 Получить доступ к ключу
-      </button>
-      <button onclick="document.getElementById('admin-modal').style.display='none'" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--text-secondary); cursor:pointer;">
-        Закрыть
-      </button>
-      <p id="escrow-status" style="margin-top:12px; font-size:12px; text-align:center; color:var(--text-muted);"></p>
+    </div>
+    <div class="chat-list" id="chat-list">
+      <!-- Чаты рендерятся через JS -->
     </div>
   </div>
 
-  <script src="js/app.js"></script>
+  <!-- ========== MAIN CHAT (ОКНО) ========== -->
+  <main class="chat-area">
+    <div class="chat-top-bar">
+      <div class="chat-top-avatar">👤</div>
+      <div class="chat-top-info">
+        <div class="chat-top-name" id="chat-name">Выберите чат</div>
+        <div class="chat-top-status" id="chat-status">—</div>
+      </div>
+      <div class="encryption-badge">🔐 E2E</div>
+    </div>
+
+    <div class="messages-container" id="messages-container">
+      <div class="empty-state">
+        <div class="empty-state-icon">💬</div>
+        <h3>Добро пожаловать в Web3 Messenger</h3>
+        <p>Подключи кошелек, чтобы начать.</p>
+      </div>
+    </div>
+
+    <div class="input-container">
+      <button class="icon-btn">📎</button>
+      <div class="input-wrapper">
+        <input type="text" placeholder="Введите сообщение..." id="msg-input" disabled>
+        <button class="icon-btn">😊</button>
+      </div>
+      <button class="send-btn" id="send-btn" disabled>➤</button>
+    </div>
+  </main>
+</div>
+
+<!-- ========== MODAL REGISTRATION (СКРЫТО) ========== -->
+<div id="reg-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:100; align-items:center; justify-content:center;">
+  <div style="background:var(--bg-secondary); padding:24px; border-radius:16px; width:90%; max-width:400px; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+    <h2 style="margin-bottom:16px;">🆔 Регистрация профиля</h2>
+    <p style="color:var(--text-secondary); margin-bottom:20px; font-size:14px;">
+      Создай свой ончейн-профиль в сети Polygon.
+    </p>
+    <input type="text" id="reg-username" placeholder="Никнейм (уникальный)" style="width:100%; padding:10px; margin-bottom:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg-tertiary); color:var(--text-primary);">
+    <input type="text" id="reg-bio" placeholder="О себе" style="width:100%; padding:10px; margin-bottom:16px; border-radius:8px; border:1px solid var(--border); background:var(--bg-tertiary); color:var(--text-primary);">
+    
+    <button onclick="submitRegistration()" id="btn-submit" style="width:100%; padding:12px; background:var(--accent); color:white; border:none; border-radius:8px; font-weight:600; cursor:pointer;">
+      Зарегистрироваться
+    </button>
+    <p id="reg-status" style="margin-top:12px; font-size:12px; text-align:center;"></p>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
 </body>
 </html>
