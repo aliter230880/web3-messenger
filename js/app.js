@@ -1,10 +1,10 @@
-// Web3 Messenger - App Logic v7.1
-// ✅ Real on-chain messaging with wallet signatures
-// ✅ Hybrid encryption (AES-GCM + RSA-OAEP) via KeyRegistry
-// ✅ Auto BASE_URL from current domain
+// Web3 Messenger - App Logic v7.2
+// ✅ Auto-refresh chat every 10s
+// ✅ Auto-add contact when receiving message from unknown address
+// ✅ Delete chat functionality
 // ✅ Smooth account change handling (no page reload)
 
-console.log('🚀 Web3 Messenger v7.1 loaded');
+console.log('🚀 Web3 Messenger v7.2 loaded');
 
 if (typeof ethers === 'undefined') {
     console.error('❌ ethers.js не загружен! Проверьте CDN в index.html');
@@ -74,9 +74,8 @@ const store = {
 
 // 🔐 RSA-ключи пользователя (хранятся в localStorage)
 let userRSAKeyPair = null;
-
-// Флаг, чтобы избежать множественных одновременных инициализаций
 let isInitializing = false;
+let autoRefreshInterval = null;
 
 // ─── Инициализация ───────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
@@ -150,6 +149,9 @@ async function initWallet() {
         updateShareButton();
         await checkRegistration();
         await loadOrGenerateRSAKeys();
+
+        // Запускаем автообновление чата
+        startAutoRefresh();
     } catch (e) {
         console.error('Init error:', e);
         showError('wallet-msg', 'Ошибка: ' + e.message);
@@ -439,8 +441,10 @@ async function loadMessagesForChat(chatId) {
 
         let chat = getChatById(chatId);
         if (!chat) {
+            // Автоматически добавляем контакт, если его нет
             const profile = await getProfileByAddress(counterparty);
             const name = profile?.username || counterparty.slice(0, 8) + '...';
+            contactsStore.add({ address: counterparty, username: profile?.username });
             chat = {
                 id: counterparty,
                 name: name,
@@ -471,7 +475,41 @@ async function loadMessagesForChat(chatId) {
 async function refreshCurrentChat() {
     if (!store.currentChat) return;
     await loadMessagesForChat(store.currentChat);
-    showToast('🔄 Чат обновлён', 'info');
+    // showToast не показываем при автообновлении, чтобы не спамить
+    if (!autoRefreshInterval) showToast('🔄 Чат обновлён', 'info');
+}
+
+// ─── Автообновление чата ─────────────────────────────────────────────────────
+function startAutoRefresh() {
+    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    autoRefreshInterval = setInterval(async () => {
+        if (store.currentChat && signer) {
+            await loadMessagesForChat(store.currentChat);
+        }
+    }, 10000); // каждые 10 секунд
+}
+
+function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+}
+
+// ─── Удаление чата ───────────────────────────────────────────────────────────
+function deleteChat(chatId) {
+    const index = store.chats.findIndex(c => c.id === chatId);
+    if (index === -1) return;
+
+    // Удаляем чат из store
+    store.chats.splice(index, 1);
+    if (store.currentChat === chatId) {
+        store.currentChat = null;
+        renderEmptyState();
+        updateInputState();
+    }
+    renderChatList();
+    showToast('🗑️ Чат удалён', 'info');
 }
 
 function getChatById(id) {
@@ -537,6 +575,7 @@ function renderChatList() {
                     ${chat.unread ? `<span class="badge">${chat.unread}</span>` : ''}
                 </div>
             </div>
+            <button class="delete-chat-btn" onclick="event.stopPropagation(); deleteChat('${chat.id}')" title="Удалить чат">✕</button>
         </div>
     `).join('');
 }
@@ -672,14 +711,13 @@ function setupEventListeners() {
     if (window.ethereum) {
         window.ethereum.on("accountsChanged", async (accounts) => {
             if (accounts.length === 0) {
-                // Кошелёк отключён
                 userAddress = null;
                 signer = null;
                 updateWalletUI();
                 updateInputState();
                 showToast('Кошелёк отключён', 'info');
+                stopAutoRefresh();
             } else {
-                // Адрес сменился – переинициализируем
                 await initWallet();
                 showToast(`Адрес сменён: ${userAddress.slice(0,6)}...${userAddress.slice(-4)}`, 'success');
                 if (store.currentChat) {
@@ -689,7 +727,6 @@ function setupEventListeners() {
         });
 
         window.ethereum.on("chainChanged", () => {
-            // Смена сети – перезагружаем, чтобы обновить провайдера
             window.location.reload();
         });
     }
@@ -858,3 +895,4 @@ window.closeRegisterModal  = closeRegisterModal;
 window.registerUser        = registerUser;
 window.refreshCurrentChat  = refreshCurrentChat;
 window.verifySignature     = verifySignature;
+window.deleteChat          = deleteChat;
