@@ -92,6 +92,35 @@ body {
   text-align: center;
 }
 
+/* ─── User Dropdown Menu ───────────────────────────────────────────────────── */
+.user-dropdown {
+  position: absolute;
+  top: 70px;
+  left: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+  min-width: 180px;
+  overflow: hidden;
+}
+
+.user-dropdown-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.user-dropdown-item:hover {
+  background: var(--bg-tertiary);
+}
+
 /* ─── Chat Panel ───────────────────────────────────────────────────────────── */
 .chat-panel {
   width: 340px;
@@ -296,7 +325,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  will-change: scroll-position; /* снижает моргание при перерисовке */
+  will-change: scroll-position;
 }
 
 .date-separator { text-align: center; margin: 16px 0; }
@@ -692,3 +721,26 @@ body {
 .text-success { color: var(--success); }
 .text-danger  { color: var(--danger); }
 .text-warning { color: var(--warning); }
+
+/* ─── Profile & Contacts Modals ────────────────────────────────────────────── */
+.profile-info {
+  margin: 20px 0;
+  text-align: left;
+}
+.profile-avatar {
+  font-size: 48px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+.contacts-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+.contact-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.contact-item:last-child { border-bottom: none; }
