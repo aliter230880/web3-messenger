@@ -12,6 +12,19 @@
 <body>
     <div class="app-container">
         <aside class="sidebar">
+            <!-- Аватар и меню пользователя -->
+            <div class="sidebar-item" id="user-avatar-btn" style="display:none;" onclick="toggleUserMenu()">
+                <span id="user-avatar-emoji">👤</span>
+                <span>Аккаунт</span>
+            </div>
+            <div id="user-dropdown-menu" class="user-dropdown hidden">
+                <div class="user-dropdown-item" onclick="openProfileModal()">👤 Профиль</div>
+                <div class="user-dropdown-item" onclick="openContactsModal()">📇 Контакты</div>
+                <div class="user-dropdown-item" onclick="openSettingsModal()">⚙️ Настройки</div>
+                <div class="user-dropdown-item" onclick="openAdminModal()" id="admin-menu-item" style="display:none;">🛡️ Админ</div>
+                <div class="user-dropdown-item" onclick="logout()">🚪 Выйти</div>
+            </div>
+
             <div class="sidebar-item active" data-folder="all">
                 <span>💬</span><span>Все</span><span class="sidebar-badge" id="all-badge">147</span>
             </div>
@@ -23,9 +36,6 @@
             </div>
             <div class="sidebar-item" data-folder="work">
                 <span>💼</span><span>Работа</span><span class="sidebar-badge" id="work-badge">38</span>
-            </div>
-            <div class="sidebar-item" style="margin-top: auto;" id="wallet-btn">
-                <span>🦊</span><span>Подключить</span>
             </div>
             <div class="sidebar-item" id="admin-btn" style="display:none;" onclick="openAdminModal()">
                 <span>🛡️</span><span>Админ</span>
@@ -60,8 +70,6 @@
                 <div class="encryption-badge">🔐 E2E</div>
                 <button class="icon-btn" id="refresh-chat-btn" title="Обновить чат из блокчейна" onclick="refreshCurrentChat()">🔄</button>
                 <button class="share-btn" id="share-profile-btn" title="Поделиться профилем" style="display:none;" onclick="openShareModal()">🔗</button>
-                <!-- Кнопка настроек теперь вызывает openSettingsModal -->
-                <button class="icon-btn" id="settings-btn" title="Настройки" onclick="openSettingsModal()">⚙️</button>
             </div>
             <div class="messages-container" id="messages-container">
                 <div class="empty-state">
@@ -178,7 +186,6 @@
             <button onclick="clearAllData()" class="w-full py-3.5 bg-red-500/8 hover:bg-red-500/12 border border-red-500/20 text-red-400 rounded-2xl text-sm transition">
                 🗑️ Сбросить все данные
             </button>
-            <!-- Кнопка "Обновить ключ шифрования" будет добавлена динамически через openSettingsModal() -->
             <button class="btn-secondary" onclick="closeModal('settingsModal')">Закрыть</button>
         </div>
     </div>
@@ -205,6 +212,28 @@
             <button onclick="wallet.changePasswordWithUI()" class="w-full py-4 bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold rounded-2xl transition">
                 Сменить пароль
             </button>
+        </div>
+    </div>
+
+    <!-- Profile Modal -->
+    <div id="profile-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <h3>👤 Профиль</h3>
+            <div class="profile-info">
+                <div class="profile-avatar">👤</div>
+                <p class="text-sm"><span class="text-zinc-400">Адрес:</span> <span id="profile-address" class="font-mono">—</span></p>
+                <p class="text-sm"><span class="text-zinc-400">Никнейм:</span> <span id="profile-username">—</span></p>
+            </div>
+            <button class="btn-secondary" onclick="closeModal('profile-modal')">Закрыть</button>
+        </div>
+    </div>
+
+    <!-- Contacts Modal -->
+    <div id="contacts-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <h3>📇 Контакты</h3>
+            <div id="contacts-list" class="contacts-list"></div>
+            <button class="btn-secondary" onclick="closeModal('contacts-modal')">Закрыть</button>
         </div>
     </div>
 
