@@ -22,7 +22,7 @@ contract IdentityV2 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event ProfileRegistered(address indexed user, string username, uint256 timestamp);
     event PublicKeySet(address indexed user, bytes publicKey);
 
-    // 🔧 Исправлено: передаём msg.sender как начального владельца
+    // ✅ ИСПРАВЛЕНО
     function initialize() public initializer {
         __Ownable_init(msg.sender);
     }
