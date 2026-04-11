@@ -1,15 +1,11 @@
-// Web3 Messenger - App Logic v7.7
+// Web3 Messenger - App Logic v7.8
 // ✅ Auto-refresh current chat every 10s (no flicker)
 // ✅ Background discovery of new conversations (every 30s)
 // ✅ Persistent chat deletion
-// ✅ Fallback to unencrypted message if recipient has no public key
-// ✅ Automatic RSA key generation if missing in KeyRegistry
-// ✅ Manual key regeneration in settings
-// ✅ Sent messages displayed as plaintext for sender
-// ✅ Graceful decryption failure: show "[Зашифрованное сообщение]" instead of JSON
+// ✅ All messages sent as plaintext (encryption temporarily disabled)
 // ✅ Smooth account change handling
 
-console.log('🚀 Web3 Messenger v7.7 loaded');
+console.log('🚀 Web3 Messenger v7.8 loaded (plaintext mode)');
 
 if (typeof ethers === 'undefined') {
     console.error('❌ ethers.js не загружен! Проверьте CDN в index.html');
@@ -22,7 +18,6 @@ let currentUsername = '';
 const ADMIN_ADDRESS    = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
 const IDENTITY_CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
 const MESSAGE_CONTRACT_ADDRESS = "0x906DCA5190841d5F0acF8244bd8c176ecb24139D";
-const KEY_REGISTRY_ADDRESS = "0x075Da61CCaaC73279CCc49097B8e5fDcF6dd8737";
 const BASE_URL = window.location.origin + '/';
 
 // ABI MessageStorage
@@ -31,12 +26,6 @@ const MESSAGE_ABI = [
     "function getMessages(address sender, address recipient, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[])",
     "function getConversation(address userA, address userB, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[] sent, tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[] received)",
     "function messageCount(address, address) view returns (uint256)"
-];
-
-// ABI KeyRegistry
-const KEY_REGISTRY_ABI = [
-    "function setPublicKey(bytes calldata publicKey) external",
-    "function getPublicKey(address user) external view returns (bytes memory)"
 ];
 
 // ─── Хранилище контактов ────────────────────────────────────────────────────
@@ -106,8 +95,6 @@ const store = {
     messageCache: {}
 };
 
-// 🔐 RSA-ключи пользователя (хранятся в localStorage)
-let userRSAKeyPair = null;
 let isInitializing = false;
 let autoRefreshInterval = null;
 let discoveryInterval = null;
@@ -188,7 +175,6 @@ async function initWallet() {
         updateInputState();
         updateShareButton();
         await checkRegistration();
-        await ensureEncryptionKeys();
 
         startAutoRefresh();
         startDiscovery();
@@ -312,114 +298,7 @@ async function registerUser() {
     }
 }
 
-// ─── 🔐 Управление ключами шифрования ─────────────────────────────────────────
-async function ensureEncryptionKeys() {
-    if (!userAddress) return;
-
-    const keyRegistry = new ethers.Contract(KEY_REGISTRY_ADDRESS, KEY_REGISTRY_ABI, provider);
-    let hasPublicKey = false;
-    try {
-        const key = await keyRegistry.getPublicKey(userAddress);
-        hasPublicKey = key && key !== '0x';
-    } catch (e) { /* игнорируем */ }
-
-    const stored = localStorage.getItem('rsa_private_key');
-    if (stored && hasPublicKey) {
-        userRSAKeyPair = { privateKey: JSON.parse(stored) };
-        console.log('🔑 RSA ключи загружены из localStorage');
-        return;
-    }
-
-    await generateAndRegisterRSAKeys();
-}
-
-async function generateAndRegisterRSAKeys() {
-    showToast('🔐 Генерация ключей шифрования...', 'info');
-    try {
-        const keyPair = await crypto.subtle.generateKey(
-            { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1,0,1]), hash: "SHA-256" },
-            true, ["encrypt", "decrypt"]
-        );
-        const privateKeyJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
-        localStorage.setItem('rsa_private_key', JSON.stringify(privateKeyJwk));
-        userRSAKeyPair = { privateKey: privateKeyJwk };
-
-        const publicKeyBytes = await crypto.subtle.exportKey("spki", keyPair.publicKey);
-        const publicKeyHex = "0x" + Array.from(new Uint8Array(publicKeyBytes)).map(b => b.toString(16).padStart(2,'0')).join('');
-
-        const keyRegistry = new ethers.Contract(KEY_REGISTRY_ADDRESS, KEY_REGISTRY_ABI, signer);
-        const tx = await keyRegistry.setPublicKey(publicKeyHex);
-        await tx.wait();
-        showToast('✅ Ключи шифрования сохранены в блокчейне!', 'success');
-        console.log('✅ RSA keys generated and registered');
-    } catch (e) {
-        console.error('RSA key generation failed:', e);
-        showToast('❌ Ошибка генерации ключей', 'error');
-    }
-}
-
-async function regenerateEncryptionKeys() {
-    if (!signer) return showToast('Кошелёк не подключён', 'error');
-    if (!confirm('Это сгенерирует НОВУЮ пару ключей. Старые зашифрованные сообщения станут нечитаемыми. Продолжить?')) return;
-
-    localStorage.removeItem('rsa_private_key');
-    userRSAKeyPair = null;
-    await generateAndRegisterRSAKeys();
-}
-
-// 🔐 Гибридное шифрование (AES + RSA) – возвращает null, если ключ не найден
-async function hybridEncrypt(plaintext, recipientAddress) {
-    const keyRegistry = new ethers.Contract(KEY_REGISTRY_ADDRESS, KEY_REGISTRY_ABI, provider);
-    let publicKeyHex;
-    try {
-        publicKeyHex = await keyRegistry.getPublicKey(recipientAddress);
-    } catch (e) {
-        return null;
-    }
-    if (!publicKeyHex || publicKeyHex === '0x') return null;
-
-    const publicKeyBytes = new Uint8Array(publicKeyHex.slice(2).match(/.{1,2}/g).map(b => parseInt(b,16)));
-    const publicKey = await crypto.subtle.importKey("spki", publicKeyBytes, { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]);
-
-    const aesKey = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]);
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-
-    const encoded = new TextEncoder().encode(plaintext);
-    const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, aesKey, encoded);
-
-    const rawAesKey = await crypto.subtle.exportKey("raw", aesKey);
-    const encryptedAesKey = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, publicKey, rawAesKey);
-
-    return {
-        ciphertext: "0x" + Array.from(new Uint8Array(ciphertext)).map(b => b.toString(16).padStart(2,'0')).join(''),
-        encryptedKey: "0x" + Array.from(new Uint8Array(encryptedAesKey)).map(b => b.toString(16).padStart(2,'0')).join(''),
-        iv: "0x" + Array.from(iv).map(b => b.toString(16).padStart(2,'0')).join('')
-    };
-}
-
-// 🔓 Гибридная расшифровка – при ошибке возвращает null
-async function hybridDecrypt(encryptedData) {
-    if (!userRSAKeyPair || !userRSAKeyPair.privateKey) return null;
-
-    try {
-        const privateKey = await crypto.subtle.importKey("jwk", userRSAKeyPair.privateKey, { name: "RSA-OAEP", hash: "SHA-256" }, false, ["decrypt"]);
-
-        const encryptedKeyBytes = new Uint8Array(encryptedData.encryptedKey.slice(2).match(/.{1,2}/g).map(b => parseInt(b,16)));
-        const ivBytes = new Uint8Array(encryptedData.iv.slice(2).match(/.{1,2}/g).map(b => parseInt(b,16)));
-        const ciphertextBytes = new Uint8Array(encryptedData.ciphertext.slice(2).match(/.{1,2}/g).map(b => parseInt(b,16)));
-
-        const rawAesKey = await crypto.subtle.decrypt({ name: "RSA-OAEP" }, privateKey, encryptedKeyBytes);
-        const aesKey = await crypto.subtle.importKey("raw", rawAesKey, { name: "AES-GCM" }, false, ["decrypt"]);
-
-        const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: ivBytes }, aesKey, ciphertextBytes);
-        return new TextDecoder().decode(decrypted);
-    } catch (e) {
-        console.warn('Decryption failed:', e);
-        return null;
-    }
-}
-
-// ─── Подпись и отправка сообщений (с fallback-ом на незашифрованное) ─────────
+// ─── Подпись и отправка сообщений (открытый текст) ────────────────────────────
 async function signMessage(text) {
     if (!signer) throw new Error('Кошелёк не подключён');
     return await signer.signMessage(text);
@@ -444,40 +323,17 @@ async function sendMessage() {
     btn.disabled = true;
     input.disabled = true;
     const originalPlaceholder = input.placeholder;
-    input.placeholder = '⏳ Подготовка...';
+    input.placeholder = '✍️ Подпись...';
 
     try {
-        let encrypted = await hybridEncrypt(plaintext, recipient);
-        let messageText, isEncrypted;
-
-        if (encrypted) {
-            messageText = JSON.stringify(encrypted);
-            isEncrypted = true;
-        } else {
-            const userChoice = confirm(
-                '⚠️ У получателя нет публичного ключа шифрования.\n\n' +
-                'Вы можете отправить сообщение открытым текстом (НЕЗАШИФРОВАННЫМ).\n\n' +
-                'Нажмите "OK", чтобы отправить открыто, или "Отмена", чтобы отменить отправку.'
-            );
-            if (!userChoice) {
-                showToast('❌ Отправка отменена', 'info');
-                return;
-            }
-            messageText = plaintext;
-            isEncrypted = false;
-            showToast('🔓 Отправка незашифрованного сообщения', 'info');
-        }
-
-        input.placeholder = isEncrypted ? '🔐 Подпись...' : '✍️ Подпись...';
-
-        const signature = await signMessage(messageText);
+        const signature = await signMessage(plaintext);
         const msgContract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
-        const tx = await msgContract.sendMessage(recipient, messageText, signature);
+        const tx = await msgContract.sendMessage(recipient, plaintext, signature);
 
         showToast('📤 Транзакция отправлена. Ожидайте...', 'info');
         await tx.wait();
 
-        // Добавляем отправленное сообщение локально, чтобы отобразить сразу
+        // Добавляем отправленное сообщение локально
         const newMsg = {
             id: Date.now().toString() + userAddress,
             text: plaintext,
@@ -486,8 +342,7 @@ async function sendMessage() {
             status: 'delivered',
             signature: signature,
             sender: userAddress,
-            timestamp: Math.floor(Date.now() / 1000),
-            encrypted: isEncrypted
+            timestamp: Math.floor(Date.now() / 1000)
         };
         chat.messages.push(newMsg);
         chat.preview = plaintext;
@@ -499,7 +354,7 @@ async function sendMessage() {
         renderChatList();
 
         input.value = '';
-        showToast(isEncrypted ? '✅ Зашифрованное сообщение сохранено!' : '✅ Сообщение сохранено (открытый текст)', 'success');
+        showToast('✅ Сообщение сохранено в блокчейне!', 'success');
         // Загружаем свежие сообщения, чтобы синхронизироваться с блокчейном
         await loadMessagesForChat(recipient);
     } catch (e) {
@@ -513,7 +368,7 @@ async function sendMessage() {
     }
 }
 
-// ─── Загрузка сообщений (с показом плейсхолдера при ошибке расшифровки) ───────
+// ─── Загрузка сообщений ───────────────────────────────────────────────────────
 async function loadMessagesForChat(chatId) {
     if (!signer || !userAddress) return;
 
@@ -528,41 +383,16 @@ async function loadMessagesForChat(chatId) {
 
         const formatted = [];
         for (const m of allMessages) {
-            let displayText = m.text;
-            let isEncrypted = false;
             const isSentByMe = m.sender.toLowerCase() === userAddress.toLowerCase();
-
-            // Пытаемся распознать и расшифровать
-            try {
-                const parsed = JSON.parse(m.text);
-                if (parsed.ciphertext && parsed.encryptedKey && parsed.iv) {
-                    const decrypted = await hybridDecrypt(parsed);
-                    if (decrypted !== null) {
-                        displayText = decrypted;
-                        isEncrypted = true;
-                    } else {
-                        // Не удалось расшифровать
-                        displayText = '[Зашифрованное сообщение]';
-                        isEncrypted = true; // технически оно зашифровано
-                    }
-                } else {
-                    displayText = m.text;
-                }
-            } catch (e) {
-                // Не JSON – оставляем как есть
-                displayText = m.text;
-            }
-
             formatted.push({
                 id: m.timestamp.toString() + m.sender,
-                text: displayText,
+                text: m.text,
                 sent: isSentByMe,
                 time: new Date(m.timestamp * 1000).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
                 status: 'delivered',
                 signature: m.signature,
                 sender: m.sender,
-                timestamp: m.timestamp,
-                encrypted: isEncrypted
+                timestamp: m.timestamp
             });
         }
 
@@ -793,10 +623,8 @@ function renderMessages() {
                     ${m.sent ? `
                         <span class="status">${m.status === 'delivered' ? '✓✓' : '⏳'}</span>
                         ${m.signature ? '<span class="sig-badge" title="Подписано кошельком">🔐</span>' : ''}
-                        ${m.encrypted ? '' : '<span class="unencrypted-badge" title="Незашифрованное сообщение">🔓</span>'}
                     ` : `
                         ${m.signature ? '<span class="sig-badge" title="Подписано кошельком" style="cursor:pointer;" onclick="verifySignature(\'' + m.id + '\')">🔐</span>' : ''}
-                        ${m.encrypted ? '' : '<span class="unencrypted-badge" title="Незашифрованное сообщение">🔓</span>'}
                     `}
                 </div>
             </div>
@@ -1068,27 +896,7 @@ async function addContactFromInput() {
     }
 }
 
-// 🆕 Открытие модалки настроек с добавлением кнопки обновления ключа
 function openSettingsModal() {
-    const modal = document.getElementById('settingsModal');
-    if (!modal) return;
-
-    if (!document.getElementById('regenerateKeyBtn')) {
-        const modalContent = modal.querySelector('.modal-content');
-        const closeBtn = modalContent.querySelector('.btn-secondary');
-        const btnContainer = document.createElement('div');
-        btnContainer.className = 'mt-4 pt-4 border-t border-white/10';
-        btnContainer.innerHTML = `
-            <p class="text-xs text-zinc-500 mb-2">🔐 Шифрование</p>
-            <button id="regenerateKeyBtn" class="w-full py-3 bg-yellow-400/10 hover:bg-yellow-400/20 text-yellow-400 border border-yellow-400/30 rounded-xl text-sm transition">
-                🔄 Обновить ключ шифрования
-            </button>
-            <p class="text-xs text-zinc-600 mt-1">Старые зашифрованные сообщения станут нечитаемыми</p>
-        `;
-        modalContent.insertBefore(btnContainer, closeBtn);
-        document.getElementById('regenerateKeyBtn').onclick = regenerateEncryptionKeys;
-    }
-
     openModal('settingsModal');
 }
 
