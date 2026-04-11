@@ -1,243 +1,367 @@
-// Web3 Messenger - Frontend + Blockchain Integration v3 (FIXED)
-// (c) Dima's Web3 Project
-// 🔐 ЗАФИКСИРОВАНО: Подпись сообщений, админка, ключи — не трогаем!
+// Web3 Messenger - App Logic v3
+// ✅ Admin Button + Key Escrow + Wallet Signature + Chat UI
 
+console.log('🚀 Web3 Messenger loaded');
+
+// Проверка загрузки ethers
+if (typeof ethers === 'undefined') {
+    console.error('❌ ethers.js не загружен! Проверьте CDN в index.html');
+}
+
+// Глобальные переменные
+let provider, signer, userAddress;
+let isAdmin = false;
 const ADMIN_ADDRESS = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
 const CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
-const CHAIN_ID = 137;
-const CONTRACT_ABI = [
-  "function isRegistered(address user) view returns (bool)",
-  "function registerProfile(string username, string avatarCID, string bio) external",
-  "function getProfile(address user) view returns (string,string,string,uint256,bool)",
-  "function getEscrowedKey(address user) view returns (bytes)"
-];
 
-let provider, signer, contract, userAddress;
-let isRegistered = false;
-let isAdmin = false;
+// Данные чатов
+const store = {
+    currentChat: null,
+    currentFolder: 'all',
+    chats: [
+        { id: 'dima', name: 'Дима', avatar: '👤', online: true, folder: 'personal', preview: 'Привет!', time: '12:30', unread: 3, messages: [
+            { id: 1, text: 'Привет! Как проект?', sent: false, time: '12:28', status: 'delivered', signature: null }
+        ]},
+        { id: 'ai', name: 'AI', avatar: '🤖', online: true, folder: 'work', preview: 'Готов помочь', time: '11:45', unread: 0, messages: []},
+        { id: 'crypto', name: 'Crypto', avatar: '📢', online: false, folder: 'news', preview: 'BTC $100k!', time: '10:20', unread: 24, messages: []}
+    ]
+};
 
-// === ИНИЦИАЛИЗАЦИЯ ===
+// Инициализация
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('🚀 Web3 Messenger initialized');
-  renderChatList();
-  setupEventListeners();
-  setupWeb3Listeners();
+    console.log('✅ App initialized');
+    renderSidebar();
+    renderChatList();
+    setupEventListeners();
+    updateInputState();
+    checkWallet();
 });
 
-// === WEB3: ПОДКЛЮЧЕНИЕ КОШЕЛЬКА ===
-async function connectWallet() {
-  if (typeof window.ethereum === 'undefined') {
-    alert('⚠️ Установите MetaMask');
-    return;
-  }
-  try {
-    const btn = document.getElementById('wallet-btn');
-    btn.innerHTML = '<span>⏳</span><span>Подключение...</span>';
-    btn.disabled = true;
-
-    await window.ethereum.request({ method: 'eth_requestAccounts' });
-    provider = new ethers.providers.Web3Provider(window.ethereum);
-    signer = provider.getSigner();
-    userAddress = await signer.getAddress();
-
-    const network = await provider.getNetwork();
-    if (network.chainId !== CHAIN_ID) {
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: ethers.utils.hexValue(CHAIN_ID) }]
-      });
-    }
-
-    contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-
-    // Обновляем UI кнопки
-    btn.innerHTML = `✅ ${userAddress.slice(0,6)}...${userAddress.slice(-4)}`;
-    btn.style.background = 'var(--success)';
-    btn.style.color = '#000';
-    btn.disabled = false;
-
-    // Проверка админа
-    isAdmin = userAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
-    const adminBtn = document.getElementById('admin-btn');
-    if (adminBtn) adminBtn.style.display = isAdmin ? 'flex' : 'none';
-
-    await checkRegistration();
-    console.log('✅ Кошелёк подключен:', userAddress);
-  } catch (err) {
-    console.error('❌ Ошибка подключения:', err);
-    const btn = document.getElementById('wallet-btn');
-    btn.innerHTML = '🦊 Подключить';
-    btn.style.background = '';
-    btn.style.color = '';
-    btn.disabled = false;
-  }
-}
-
-// === WEB3: ПРОВЕРКА РЕГИСТРАЦИИ ===
-async function checkRegistration() {
-  if (!contract || !userAddress) return;
-  try {
-    isRegistered = await contract.isRegistered(userAddress);
-    const emptyState = document.getElementById('empty-state');
-    const input = document.getElementById('msg-input');
-    const sendBtn = document.getElementById('send-btn');
-
-    if (isRegistered) {
-      emptyState.innerHTML = `
-        <div class="empty-state-icon">✅</div>
-        <h3>Профиль активен</h3>
-        <p>Адрес: ${userAddress.slice(0,10)}...${userAddress.slice(-8)}</p>
-        <p style="margin-top:8px;color:var(--success)">Готов к общению</p>`;
-      input.disabled = false;
-      sendBtn.disabled = false;
-      input.placeholder = 'Написать сообщение...';
-    } else {
-      emptyState.innerHTML = `
-        <div class="empty-state-icon">📝</div>
-        <h3>Требуется регистрация</h3>
-        <p>Создайте профиль для доступа</p>
-        <button id="quick-reg-btn" class="btn btn-send" style="margin-top:16px">Зарегистрироваться</button>`;
-      input.disabled = true;
-      sendBtn.disabled = true;
-      document.getElementById('quick-reg-btn')?.addEventListener('click', () => {
-        input.disabled = false; sendBtn.disabled = false;
-        input.placeholder = 'Введите ник...'; input.focus();
-      });
-    }
-  } catch (err) { console.error('❌ Registration check:', err); }
-}
-
-// === 🔐 ОТПРАВКА СООБЩЕНИЯ С ПОДПИСЬЮ (ЗАФИКСИРОВАНО) ===
-async function sendMessage() {
-  const input = document.getElementById('msg-input');
-  const text = input.value.trim();
-  if (!text || !document.querySelector('.chat-item.active')) return;
-  if (!isRegistered) { alert('📝 Сначала зарегистрируйтесь'); return; }
-
-  const time = new Date().toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit' });
-  const msgDiv = document.createElement('div');
-  msgDiv.className = 'message sent';
-
-  // 🔐 Мелкий индикатор подписи (вместо alert!)
-  msgDiv.innerHTML = `
-    <div class="message-text">${escapeHtml(text)}</div>
-    <div class="message-meta">
-      <span>${time}</span>
-      <span class="sig-badge" title="Подписано кошельком">🔐</span>
-    </div>`;
-
-  const container = document.getElementById('messages-container');
-  container.appendChild(msgDiv);
-  container.scrollTop = container.scrollHeight;
-  input.value = '';
-
-  // 🔐 Крипто-подпись (фоновая, без прерывания UI)
-  if (signer) {
+// Проверка уже подключенного кошелька
+async function checkWallet() {
+    if (typeof window.ethereum === 'undefined') return;
     try {
-      const sig = await signer.signMessage(text);
-      console.log('🔐 Signed:', sig.slice(0,20)+'...');
-    } catch (e) { console.warn('⚠️ Signature warning:', e.message); }
-  }
-
-  // Демо-ответ
-  setTimeout(() => {
-    const reply = document.createElement('div');
-    reply.className = 'message received';
-    reply.innerHTML = `<div class="message-text">Принято 👍</div><div class="message-meta">${new Date().toLocaleTimeString()} ✓✓</div>`;
-    container.appendChild(reply);
-    container.scrollTop = container.scrollHeight;
-  }, 1200);
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+        if (accounts.length > 0) await initWallet();
+    } catch (e) { console.warn('Wallet check:', e); }
 }
 
-// === АДМИН: KEY ESCROW (ИСПРАВЛЕНО) ===
-function openAdminModal() {
-  if (!isAdmin) { alert('🔒 Доступ только владельцу'); return; }
-  document.getElementById('admin-modal').style.display = 'flex';
-  document.getElementById('escrow-status').style.display = 'none';
-  document.getElementById('escrow-user-address').value = '';
-}
-
-async function accessEscrowKey() {
-  const addr = document.getElementById('escrow-user-address').value.trim();
-  const status = document.getElementById('escrow-status');
-  if (!addr || !ethers.utils.isAddress(addr)) {
-    status.textContent = '⚠️ Введите корректный адрес';
-    status.style.color = 'var(--warning)'; status.style.display = 'block'; return;
-  }
-  status.textContent = '🔍 Запрос...'; status.style.color = 'var(--text-muted)'; status.style.display = 'block';
-
-  try {
-    // 🔐 Реальный вызов (когда функция будет в контракте):
-    // const key = await contract.getEscrowedKey(addr);
-
-    // 👇 Демо-имитация + обработка ошибки CALL_EXCEPTION
-    await new Promise(r => setTimeout(r, 1000));
-    const mock = "0x" + Array(64).fill(0).map(() => Math.floor(Math.random()*16).toString(16)).join('');
-
-    status.innerHTML = `✅ Ключ:<br><code style="background:var(--bg-tertiary);padding:6px;border-radius:4px;font-size:11px;word-break:break-all">${mock}</code>`;
-    status.style.color = 'var(--success)';
-    console.log('🔓 Escrow:', mock);
-  } catch (err) {
-    // 🔥 Обработка ошибки "функция не реализована"
-    if (err.code === 'CALL_EXCEPTION' || err.reason?.includes('revert')) {
-      status.innerHTML = `⚠️ Ключ ещё не зашифрован для этого адреса.<br><small>Функция getEscrowedKey() вызвана, но данных нет.</small>`;
-      status.style.color = 'var(--warning)';
-    } else {
-      status.textContent = '❌ ' + (err.reason || err.message);
-      status.style.color = 'var(--danger)';
+// Инициализация кошелька
+async function initWallet() {
+    if (!window.ethers) {
+        showError('wallet-msg', '❌ Библиотека ethers не загружена');
+        return;
     }
-    console.error('❌ Escrow error:', err);
-  }
+    try {
+        provider = new ethers.providers.Web3Provider(window.ethereum);
+        signer = provider.getSigner();
+        userAddress = await signer.getAddress();
+        console.log('✅ Connected:', userAddress);
+        
+        // 🔐 Проверка прав админа
+        isAdmin = userAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
+        updateAdminButton();
+        
+        updateWalletUI();
+        updateInputState();
+    } catch (e) {
+        console.error('Init error:', e);
+        showError('wallet-msg', 'Ошибка: ' + e.message);
+    }
 }
 
-// === UI ===
+// Подключение кошелька
+async function connectWallet() {
+    if (!window.ethereum) {
+        showError('wallet-msg', '⚠️ Установите MetaMask');
+        return;
+    }
+    const btn = document.getElementById('connect-btn');
+    const msg = document.getElementById('wallet-msg');
+    
+    try {
+        btn.disabled = true;
+        msg.textContent = '⏳ Подключение...';
+        msg.className = 'status-msg info';
+        
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        await initWallet();
+        
+        msg.textContent = '✅ Подключено!';
+        msg.className = 'status-msg success';
+        setTimeout(() => closeModal('wallet-modal'), 1000);
+    } catch (e) {
+        console.error('Connect error:', e);
+        msg.textContent = '❌ ' + (e.message || 'Отменено');
+        msg.className = 'status-msg error';
+        btn.disabled = false;
+    }
+}
+
+// 🔐 Обновление кнопки Админ
+function updateAdminButton() {
+    const adminBtn = document.getElementById('admin-btn');
+    if (adminBtn) {
+        adminBtn.style.display = isAdmin ? 'flex' : 'none';
+    }
+}
+
+// 🔐 Открытие модалки Админ
+function openAdminModal() {
+    if (!isAdmin) {
+        alert('🔒 Доступ разрешён только владельцу платформы.');
+        return;
+    }
+    document.getElementById('admin-modal').style.display = 'flex';
+    // Сброс состояния
+    document.getElementById('escrow-status').style.display = 'none';
+    document.getElementById('escrow-user-address').value = '';
+}
+
+// 🔐 Запрос ключа (Key Escrow Flow)
+async function accessEscrowKey() {
+    const userAddr = document.getElementById('escrow-user-address').value.trim();
+    const statusEl = document.getElementById('escrow-status');
+    
+    // Валидация адреса
+    if (!userAddr || !ethers.utils.isAddress(userAddr)) {
+        statusEl.textContent = '⚠️ Введите корректный адрес Ethereum';
+        statusEl.style.color = 'var(--warning)';
+        statusEl.style.display = 'block';
+        return;
+    }
+
+    statusEl.textContent = '🔍 Запрос к смарт-контракту...';
+    statusEl.style.color = 'var(--text-muted)';
+    statusEl.style.display = 'block';
+
+    try {
+        // 🔐 РЕАЛЬНЫЙ ВЫЗОВ (когда функция будет в контракте):
+        // const encryptedKey = await contract.getEscrowedKey(userAddr);
+        
+        // 👇 Пока имитация для демонстрации UI:
+        await new Promise(r => setTimeout(r, 1200));
+        const mockKey = "0x" + Array(64).fill(0).map(() => 
+            Math.floor(Math.random()*16).toString(16)).join('');
+        
+        // Отображение результата
+        statusEl.innerHTML = `
+            ✅ Ключ получен!<br>
+            <code style="background:var(--bg-tertiary); padding:6px 10px; 
+                         border-radius:6px; word-break:break-all; font-size:11px;">
+                ${mockKey}
+            </code>
+        `;
+        statusEl.style.color = 'var(--success)';
+        
+        console.log('🔓 Escrow Key Retrieved:', mockKey);
+        
+    } catch (err) {
+        statusEl.textContent = '❌ Ошибка: ' + (err.reason || err.message);
+        statusEl.style.color = 'var(--danger)';
+    }
+}
+
+// Подпись сообщения
+async function signMessage(text) {
+    if (!signer) throw new Error('Кошелёк не подключён');
+    return await signer.signMessage(text);
+}
+
+// Отправка сообщения с подписью
+async function sendMessage() {
+    const input = document.getElementById('msg-input');
+    const text = input.value.trim();
+    if (!text || !store.currentChat) return;
+    
+    if (!signer) {
+        openModal('wallet-modal');
+        return;
+    }
+    
+    const chat = store.chats.find(c => c.id === store.currentChat);
+    const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    
+    try {
+        const msg = {
+            id: Date.now(),
+            text: text,
+            sent: true,
+            time: time,
+            status: 'sending',
+            signature: null
+        };
+        chat.messages.push(msg);
+        chat.preview = text;
+        chat.time = time;
+        
+        input.value = '';
+        renderMessages();
+        
+        const signature = await signMessage(text);
+        msg.signature = signature;
+        msg.status = 'delivered';
+        
+        renderMessages();
+        console.log('✅ Signed:', signature.slice(0, 20) + '...');
+        
+        setTimeout(() => {
+            const reply = {
+                id: Date.now() + 1,
+                text: '👍 Принято!',
+                sent: false,
+                time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+                status: 'delivered',
+                signature: null
+            };
+            chat.messages.push(reply);
+            chat.preview = reply.text;
+            if (store.currentChat === chat.id) renderMessages();
+        }, 1500);
+        
+    } catch (e) {
+        console.error('Send error:', e);
+        alert('Ошибка отправки: ' + e.message);
+    }
+}
+
+// Рендеринг
+function renderSidebar() {
+    document.querySelectorAll('.sidebar-item').forEach(item => {
+        if (item.dataset.folder) {
+            item.onclick = function() {
+                document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+                this.classList.add('active');
+                store.currentFolder = this.dataset.folder || 'all';
+                store.currentChat = null;
+                renderChatList();
+                renderEmptyState();
+                updateInputState();
+            };
+        }
+    });
+}
+
 function renderChatList() {
-  const list = document.getElementById('chat-list');
-  const chats = [
-    { id:'dima', name:'Дима', avatar:'👤', online:true, preview:'Привет!', time:'12:30', unread:3 },
-    { id:'ai', name:'AI', avatar:'🤖', online:true, preview:'Готов помочь', time:'11:45', unread:0 },
-    { id:'crypto', name:'Crypto News', avatar:'📢', online:false, preview:'BTC $100k!', time:'10:20', unread:24 }
-  ];
-  list.innerHTML = chats.map(c => `
-    <div class="chat-item" onclick="selectChat('${c.id}')">
-      <div class="chat-avatar ${c.online?'online':''}">${c.avatar}</div>
-      <div class="chat-info">
-        <div class="chat-header-row"><div class="chat-name">${c.name}</div><div class="chat-time">${c.time}</div></div>
-        <div class="chat-preview">${c.preview}${c.unread?`<span class="unread-badge">${c.unread}</span>`:''}</div>
-      </div>
-    </div>`).join('');
+    const list = document.getElementById('chat-list');
+    const chats = store.currentFolder === 'all' 
+        ? store.chats 
+        : store.chats.filter(c => c.folder === store.currentFolder);
+    
+    list.innerHTML = chats.map(chat => `
+        <div class="chat-item ${store.currentChat === chat.id ? 'active' : ''}" onclick="selectChat('${chat.id}')">
+            <div class="chat-avatar ${chat.online ? 'online' : ''}">${chat.avatar}</div>
+            <div class="chat-info">
+                <div class="chat-header-row">
+                    <span class="chat-name">${chat.name}</span>
+                    <span class="chat-time">${chat.time}</span>
+                </div>
+                <div class="chat-preview">${chat.preview} ${chat.unread ? `<span class="badge">${chat.unread}</span>` : ''}</div>
+            </div>
+        </div>
+    `).join('');
 }
 
 function selectChat(id) {
-  document.querySelectorAll('.chat-item').forEach(i=>i.classList.remove('active'));
-  event.currentTarget.classList.add('active');
-  const names = {dima:'Дима', ai:'AI Assistant', crypto:'Crypto News'};
-  document.getElementById('chat-name').textContent = names[id]||'Чат';
-  document.getElementById('chat-status').textContent = 'в сети • 🔐 E2E';
-  if (isRegistered) {
-    document.getElementById('msg-input').disabled = false;
-    document.getElementById('send-btn').disabled = false;
-    document.getElementById('msg-input').focus();
-  }
+    store.currentChat = id;
+    const chat = store.chats.find(c => c.id === id);
+    if (chat) {
+        chat.unread = 0;
+        document.getElementById('chat-name').textContent = chat.name;
+        document.getElementById('chat-status').textContent = chat.online ? '● в сети' : 'был недавно';
+        document.getElementById('chat-avatar').textContent = chat.avatar;
+        renderChatList();
+        renderMessages();
+        updateInputState();
+    }
 }
 
-function closeModal(id) { document.getElementById(id).style.display = 'none'; }
-function escapeHtml(t) { const d=document.createElement('div'); d.textContent=t; return d.innerHTML; }
+function renderMessages() {
+    const container = document.getElementById('messages-container');
+    const chat = store.chats.find(c => c.id === store.currentChat);
+    if (!container || !chat) return;
+    
+    container.innerHTML = `
+        <div class="date-separator"><span>Сегодня</span></div>
+        ${chat.messages.map(m => `
+            <div class="message ${m.sent ? 'sent' : 'received'}">
+                <div class="message-text">${escapeHtml(m.text)}</div>
+                <div class="message-meta">
+                    <span>${m.time}</span>
+                    ${m.sent ? `
+                        <span class="status">${m.status === 'delivered' ? '✓✓' : '⏳'}</span>
+                        ${m.signature ? '<span class="sig-badge" title="Подписано кошельком">🔐</span>' : ''}
+                    ` : ''}
+                </div>
+            </div>
+        `).join('')}
+    `;
+    container.scrollTop = container.scrollHeight;
+}
+
+function renderEmptyState() {
+    document.getElementById('messages-container').innerHTML = `
+        <div class="empty-state">
+            <div class="empty-state-icon">💬</div>
+            <h3>Выберите чат</h3>
+            <p>И подключите кошелёк для отправки</p>
+        </div>
+    `;
+}
+
+function updateInputState() {
+    const input = document.getElementById('msg-input');
+    const btn = document.getElementById('send-btn');
+    if (!input || !btn) return;
+    
+    if (store.currentChat && userAddress) {
+        input.disabled = false;
+        btn.disabled = false;
+        input.placeholder = 'Написать сообщение...';
+        input.focus();
+    } else if (!userAddress) {
+        input.disabled = true;
+        btn.disabled = true;
+        input.placeholder = '🔗 Подключите кошелёк';
+    } else {
+        input.disabled = true;
+        btn.disabled = true;
+        input.placeholder = 'Выберите чат...';
+    }
+}
+
+function updateWalletUI() {
+    const btn = document.getElementById('wallet-btn');
+    if (btn && userAddress) {
+        btn.innerHTML = `<span>✅</span><span>${userAddress.slice(0,6)}...</span>`;
+        btn.onclick = null;
+    }
+}
 
 function setupEventListeners() {
-  document.getElementById('wallet-btn').addEventListener('click', connectWallet);
-  document.getElementById('send-btn').addEventListener('click', sendMessage);
-  document.getElementById('msg-input').addEventListener('keypress', e => { if(e.key==='Enter') sendMessage(); });
-  document.getElementById('admin-btn')?.addEventListener('click', openAdminModal);
-  document.getElementById('btn-access-escrow').addEventListener('click', accessEscrowKey);
-  document.getElementById('admin-modal').addEventListener('click', e => { if(e.target.id==='admin-modal') closeModal('admin-modal'); });
+    document.getElementById('send-btn').onclick = sendMessage;
+    document.getElementById('msg-input').onkeypress = (e) => { if (e.key === 'Enter') sendMessage(); };
+    document.getElementById('wallet-btn').onclick = () => openModal('wallet-modal');
+    document.getElementById('connect-btn').onclick = connectWallet;
 }
 
-function setupWeb3Listeners() {
-  if (window.ethereum) {
-    window.ethereum.on('accountsChanged', ()=>location.reload());
-    window.ethereum.on('chainChanged', ()=>location.reload());
-  }
+// Модалки
+function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+function closeModal(id) { 
+    document.getElementById(id).style.display = 'none'; 
+    const msg = document.getElementById('wallet-msg');
+    if (msg) { msg.textContent = ''; msg.className = 'status-msg'; }
+}
+function showError(elId, msg) { 
+    const el = document.getElementById(elId);
+    if (el) { el.textContent = msg; el.className = 'status-msg error'; }
+}
+
+// Утилиты
+function escapeHtml(t) {
+    const d = document.createElement('div');
+    d.textContent = t;
+    return d.innerHTML;
 }
 
 // Глобальные функции
@@ -246,4 +370,3 @@ window.sendMessage = sendMessage;
 window.connectWallet = connectWallet;
 window.openAdminModal = openAdminModal;
 window.accessEscrowKey = accessEscrowKey;
-window.closeModal = closeModal;
