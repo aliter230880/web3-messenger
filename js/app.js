@@ -1,9 +1,10 @@
-// Web3 Messenger - App Logic v7.0
+// Web3 Messenger - App Logic v7.1
 // ✅ Real on-chain messaging with wallet signatures
 // ✅ Hybrid encryption (AES-GCM + RSA-OAEP) via KeyRegistry
 // ✅ Auto BASE_URL from current domain
+// ✅ Smooth account change handling (no page reload)
 
-console.log('🚀 Web3 Messenger v7.0 loaded');
+console.log('🚀 Web3 Messenger v7.1 loaded');
 
 if (typeof ethers === 'undefined') {
     console.error('❌ ethers.js не загружен! Проверьте CDN в index.html');
@@ -59,7 +60,7 @@ const contactsStore = {
     }
 };
 
-// ─── Данные чатов (теперь сообщения загружаются из контракта) ───────────────
+// ─── Данные чатов ───────────────────────────────────────────────────────────
 const store = {
     currentChat: null,
     currentFolder: 'all',
@@ -73,6 +74,9 @@ const store = {
 
 // 🔐 RSA-ключи пользователя (хранятся в localStorage)
 let userRSAKeyPair = null;
+
+// Флаг, чтобы избежать множественных одновременных инициализаций
+let isInitializing = false;
 
 // ─── Инициализация ───────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
@@ -131,6 +135,8 @@ async function checkWallet() {
 }
 
 async function initWallet() {
+    if (isInitializing) return;
+    isInitializing = true;
     try {
         provider    = new ethers.providers.Web3Provider(window.ethereum);
         signer      = provider.getSigner();
@@ -147,6 +153,8 @@ async function initWallet() {
     } catch (e) {
         console.error('Init error:', e);
         showError('wallet-msg', 'Ошибка: ' + e.message);
+    } finally {
+        isInitializing = false;
     }
 }
 
@@ -638,6 +646,9 @@ function updateWalletUI() {
         const display = currentUsername || (userAddress.slice(0, 6) + '...' + userAddress.slice(-4));
         btn.innerHTML = `<span>✅</span><span style="font-size:9px;max-width:52px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${display}</span>`;
         btn.onclick   = null;
+    } else if (btn) {
+        btn.innerHTML = `<span>🦊</span><span>Подключить</span>`;
+        btn.onclick   = () => openModal('wallet-modal');
     }
 }
 
@@ -656,6 +667,32 @@ function setupEventListeners() {
             item.style.display = name.includes(query) ? 'flex' : 'none';
         });
     };
+
+    // 🔄 MetaMask events
+    if (window.ethereum) {
+        window.ethereum.on("accountsChanged", async (accounts) => {
+            if (accounts.length === 0) {
+                // Кошелёк отключён
+                userAddress = null;
+                signer = null;
+                updateWalletUI();
+                updateInputState();
+                showToast('Кошелёк отключён', 'info');
+            } else {
+                // Адрес сменился – переинициализируем
+                await initWallet();
+                showToast(`Адрес сменён: ${userAddress.slice(0,6)}...${userAddress.slice(-4)}`, 'success');
+                if (store.currentChat) {
+                    await loadMessagesForChat(store.currentChat);
+                }
+            }
+        });
+
+        window.ethereum.on("chainChanged", () => {
+            // Смена сети – перезагружаем, чтобы обновить провайдера
+            window.location.reload();
+        });
+    }
 }
 
 // ─── Модалки ─────────────────────────────────────────────────────────────────
@@ -699,7 +736,7 @@ function escapeHtml(t) {
     return d.innerHTML;
 }
 
-// ─── Админские функции (без изменений) ────────────────────────────────────────
+// ─── Админские функции ────────────────────────────────────────────────────────
 function updateAdminButton() {
     const adminBtn = document.getElementById('admin-btn');
     if (adminBtn) adminBtn.style.display = isAdmin ? 'flex' : 'none';
