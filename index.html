@@ -89,6 +89,30 @@
         </div>
     </div>
 
+    <!-- Register Modal -->
+    <div id="register-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="register-avatar-placeholder">👤</div>
+            <h3>🚀 Создать профиль</h3>
+            <p>Новый кошелёк! Придумайте никнейм — это ваше имя в Web3 Messenger.</p>
+            <div class="register-address" id="register-address-display"></div>
+            <input
+                type="text"
+                id="register-username"
+                class="input-field"
+                placeholder="Ваш никнейм (мин. 3 символа)"
+                maxlength="32"
+                oninput="this.value = this.value.replace(/\s/g, '')"
+            >
+            <p class="register-hint">Только буквы, цифры и _ · Аватар можно добавить позже через IPFS</p>
+            <button id="register-btn" class="btn-primary" onclick="registerUser()">
+                ✅ Зарегистрироваться в Polygon
+            </button>
+            <p id="register-msg" class="status-msg"></p>
+            <button class="btn-secondary" onclick="closeRegisterModal()">Пропустить</button>
+        </div>
+    </div>
+
     <!-- Admin Modal: Key Escrow -->
     <div id="admin-modal" class="modal" style="display:none;">
         <div class="modal-content">
@@ -121,5 +145,16 @@
     </div>
 
     <script src="js/app.js"></script>
+    <script>
+        // Подставляем адрес кошелька в форму регистрации
+        document.addEventListener('DOMContentLoaded', () => {
+            const orig = window.openRegisterModal;
+            window.openRegisterModal = function() {
+                orig && orig();
+                const el = document.getElementById('register-address-display');
+                if (el && window.userAddress) el.textContent = window.userAddress;
+            };
+        });
+    </script>
 </body>
 </html>
