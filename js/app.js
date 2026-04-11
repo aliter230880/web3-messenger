@@ -1,10 +1,11 @@
-// Web3 Messenger - App Logic v7.2
-// ✅ Auto-refresh chat every 10s
+// Web3 Messenger - App Logic v7.3
+// ✅ Auto-refresh current chat every 10s
+// ✅ Background discovery of new conversations (every 30s)
+// ✅ Persistent chat deletion (saved to localStorage)
 // ✅ Auto-add contact when receiving message from unknown address
-// ✅ Delete chat functionality
-// ✅ Smooth account change handling (no page reload)
+// ✅ Smooth account change handling
 
-console.log('🚀 Web3 Messenger v7.2 loaded');
+console.log('🚀 Web3 Messenger v7.3 loaded');
 
 if (typeof ethers === 'undefined') {
     console.error('❌ ethers.js не загружен! Проверьте CDN в index.html');
@@ -24,7 +25,8 @@ const BASE_URL = window.location.origin + '/';
 const MESSAGE_ABI = [
     "function sendMessage(address recipient, string text, bytes signature) external",
     "function getMessages(address sender, address recipient, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[])",
-    "function getConversation(address userA, address userB, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[] sent, tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[] received)"
+    "function getConversation(address userA, address userB, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[] sent, tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[] received)",
+    "function messageCount(address, address) view returns (uint256)"
 ];
 
 // ABI KeyRegistry
@@ -55,9 +57,37 @@ const contactsStore = {
         }
         return false;
     },
+    remove(address) {
+        const index = this.list.findIndex(c => c.address.toLowerCase() === address.toLowerCase());
+        if (index !== -1) {
+            this.list.splice(index, 1);
+            this.save();
+            return true;
+        }
+        return false;
+    },
     get(address) {
         return this.list.find(c => c.address.toLowerCase() === address.toLowerCase());
     }
+};
+
+// ─── Управление удалёнными чатами ────────────────────────────────────────────
+const deletedChatsStore = {
+    set: new Set(),
+    load() {
+        try {
+            const saved = localStorage.getItem('web3messenger_deleted_chats');
+            if (saved) this.set = new Set(JSON.parse(saved));
+        } catch (e) { console.warn('Deleted chats load error:', e); }
+    },
+    save() {
+        try {
+            localStorage.setItem('web3messenger_deleted_chats', JSON.stringify([...this.set]));
+        } catch (e) { console.warn('Deleted chats save error:', e); }
+    },
+    add(id) { this.set.add(id); this.save(); },
+    has(id) { return this.set.has(id); },
+    delete(id) { const r = this.set.delete(id); this.save(); return r; }
 };
 
 // ─── Данные чатов ───────────────────────────────────────────────────────────
@@ -65,6 +95,7 @@ const store = {
     currentChat: null,
     currentFolder: 'all',
     chats: [
+        // Демо-чаты – можно удалить, состояние сохранится
         { id: 'dima', name: 'Дима', avatar: '👤', online: true, folder: 'personal', unread: 0, messages: [] },
         { id: 'ai', name: 'AI Assistant', avatar: '🤖', online: true, folder: 'work', unread: 0, messages: [] },
         { id: 'crypto', name: 'Crypto News', avatar: '📢', online: false, folder: 'news', unread: 0, messages: [] },
@@ -76,11 +107,13 @@ const store = {
 let userRSAKeyPair = null;
 let isInitializing = false;
 let autoRefreshInterval = null;
+let discoveryInterval = null;
 
 // ─── Инициализация ───────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('✅ App initialized');
     contactsStore.load();
+    deletedChatsStore.load();
     renderSidebar();
     renderChatList();
     setupEventListeners();
@@ -150,8 +183,8 @@ async function initWallet() {
         await checkRegistration();
         await loadOrGenerateRSAKeys();
 
-        // Запускаем автообновление чата
         startAutoRefresh();
+        startDiscovery();
     } catch (e) {
         console.error('Init error:', e);
         showError('wallet-msg', 'Ошибка: ' + e.message);
@@ -441,7 +474,6 @@ async function loadMessagesForChat(chatId) {
 
         let chat = getChatById(chatId);
         if (!chat) {
-            // Автоматически добавляем контакт, если его нет
             const profile = await getProfileByAddress(counterparty);
             const name = profile?.username || counterparty.slice(0, 8) + '...';
             contactsStore.add({ address: counterparty, username: profile?.username });
@@ -475,24 +507,60 @@ async function loadMessagesForChat(chatId) {
 async function refreshCurrentChat() {
     if (!store.currentChat) return;
     await loadMessagesForChat(store.currentChat);
-    // showToast не показываем при автообновлении, чтобы не спамить
     if (!autoRefreshInterval) showToast('🔄 Чат обновлён', 'info');
 }
 
-// ─── Автообновление чата ─────────────────────────────────────────────────────
+// ─── Автообновление текущего чата ─────────────────────────────────────────────
 function startAutoRefresh() {
     if (autoRefreshInterval) clearInterval(autoRefreshInterval);
     autoRefreshInterval = setInterval(async () => {
         if (store.currentChat && signer) {
             await loadMessagesForChat(store.currentChat);
         }
-    }, 10000); // каждые 10 секунд
+    }, 10000);
 }
 
-function stopAutoRefresh() {
-    if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval);
-        autoRefreshInterval = null;
+// 🆕 Фоновое обнаружение новых переписок
+function startDiscovery() {
+    if (discoveryInterval) clearInterval(discoveryInterval);
+    discoveryInterval = setInterval(async () => {
+        if (!signer || !userAddress) return;
+        await discoverNewChats();
+    }, 30000); // каждые 30 секунд
+}
+
+async function discoverNewChats() {
+    const msgContract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
+    const addressesToCheck = contactsStore.list.map(c => c.address);
+    // также проверим адреса из существующих чатов (вдруг контакт не сохранён)
+    store.chats.forEach(chat => {
+        if (ethers.utils.isAddress(chat.id) && !addressesToCheck.includes(chat.id)) {
+            addressesToCheck.push(chat.id);
+        }
+    });
+
+    for (const addr of addressesToCheck) {
+        if (deletedChatsStore.has(addr)) continue; // удалённые чаты не восстанавливаем
+        try {
+            const count = await msgContract.messageCount(userAddress, addr);
+            if (count.gt(0) && !getChatById(addr)) {
+                // Есть сообщения, но чата нет – создаём
+                const profile = await getProfileByAddress(addr);
+                const name = profile?.username || addr.slice(0, 8) + '...';
+                contactsStore.add({ address: addr, username: profile?.username });
+                store.chats.push({
+                    id: addr,
+                    name: name,
+                    avatar: '👤',
+                    online: false,
+                    folder: 'personal',
+                    messages: [],
+                    isContact: true
+                });
+                renderChatList();
+                console.log(`🆕 Обнаружен новый чат с ${addr}`);
+            }
+        } catch (e) { /* игнорируем */ }
     }
 }
 
@@ -501,7 +569,13 @@ function deleteChat(chatId) {
     const index = store.chats.findIndex(c => c.id === chatId);
     if (index === -1) return;
 
-    // Удаляем чат из store
+    // Если это контакт, удаляем его из contactsStore
+    if (ethers.utils.isAddress(chatId)) {
+        contactsStore.remove(chatId);
+    }
+    // Помечаем как удалённый, чтобы не восстанавливать
+    deletedChatsStore.add(chatId);
+
     store.chats.splice(index, 1);
     if (store.currentChat === chatId) {
         store.currentChat = null;
@@ -542,9 +616,10 @@ function renderSidebar() {
 
 function renderChatList() {
     const list     = document.getElementById('chat-list');
-    const allChats = [...store.chats];
+    let allChats = [...store.chats];
 
     contactsStore.list.forEach(contact => {
+        if (deletedChatsStore.has(contact.address)) return; // удалённые не показываем
         if (!allChats.find(c => c.id === contact.address)) {
             allChats.push({
                 id: contact.address,
@@ -557,6 +632,9 @@ function renderChatList() {
             });
         }
     });
+
+    // Фильтруем удалённые
+    allChats = allChats.filter(chat => !deletedChatsStore.has(chat.id));
 
     const filtered = store.currentFolder === 'all'
         ? allChats
@@ -707,7 +785,6 @@ function setupEventListeners() {
         });
     };
 
-    // 🔄 MetaMask events
     if (window.ethereum) {
         window.ethereum.on("accountsChanged", async (accounts) => {
             if (accounts.length === 0) {
@@ -716,7 +793,7 @@ function setupEventListeners() {
                 updateWalletUI();
                 updateInputState();
                 showToast('Кошелёк отключён', 'info');
-                stopAutoRefresh();
+                stopAllIntervals();
             } else {
                 await initWallet();
                 showToast(`Адрес сменён: ${userAddress.slice(0,6)}...${userAddress.slice(-4)}`, 'success');
@@ -730,6 +807,13 @@ function setupEventListeners() {
             window.location.reload();
         });
     }
+}
+
+function stopAllIntervals() {
+    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+    if (discoveryInterval) clearInterval(discoveryInterval);
+    autoRefreshInterval = null;
+    discoveryInterval = null;
 }
 
 // ─── Модалки ─────────────────────────────────────────────────────────────────
@@ -869,6 +953,8 @@ async function addContactFromInput() {
         } else {
             contactsStore.add({ address });
         }
+        // Убираем из удалённых, если был ранее удалён
+        deletedChatsStore.delete(address);
         renderChatList();
         showStatus('✅ Контакт добавлен!', 'success');
         input.value = '';
