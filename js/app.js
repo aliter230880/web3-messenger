@@ -1,11 +1,13 @@
-// Web3 Messenger - App Logic v7.4
+// Web3 Messenger - App Logic v7.5
 // ✅ Auto-refresh current chat every 10s
 // ✅ Background discovery of new conversations (every 30s)
 // ✅ Persistent chat deletion
 // ✅ Fallback to unencrypted message if recipient has no public key
+// ✅ Automatic RSA key generation if missing in KeyRegistry
+// ✅ Manual key regeneration in settings
 // ✅ Smooth account change handling
 
-console.log('🚀 Web3 Messenger v7.4 loaded');
+console.log('🚀 Web3 Messenger v7.5 loaded');
 
 if (typeof ethers === 'undefined') {
     console.error('❌ ethers.js не загружен! Проверьте CDN в index.html');
@@ -180,7 +182,7 @@ async function initWallet() {
         updateInputState();
         updateShareButton();
         await checkRegistration();
-        await loadOrGenerateRSAKeys();
+        await ensureEncryptionKeys();
 
         startAutoRefresh();
         startDiscovery();
@@ -304,16 +306,30 @@ async function registerUser() {
     }
 }
 
-// ─── 🔐 RSA-ключи и KeyRegistry ───────────────────────────────────────────────
-async function loadOrGenerateRSAKeys() {
+// ─── 🔐 Управление ключами шифрования (с проверкой наличия в KeyRegistry) ─────
+async function ensureEncryptionKeys() {
     if (!userAddress) return;
+
+    // Проверяем, есть ли публичный ключ в контракте
+    const keyRegistry = new ethers.Contract(KEY_REGISTRY_ADDRESS, KEY_REGISTRY_ABI, provider);
+    let hasPublicKey = false;
+    try {
+        const key = await keyRegistry.getPublicKey(userAddress);
+        hasPublicKey = key && key !== '0x';
+    } catch (e) { /* игнорируем */ }
+
     const stored = localStorage.getItem('rsa_private_key');
-    if (stored) {
+    if (stored && hasPublicKey) {
         userRSAKeyPair = { privateKey: JSON.parse(stored) };
         console.log('🔑 RSA ключи загружены из localStorage');
         return;
     }
 
+    // Если нет ключа в контракте или нет в localStorage — генерируем новые
+    await generateAndRegisterRSAKeys();
+}
+
+async function generateAndRegisterRSAKeys() {
     showToast('🔐 Генерация ключей шифрования...', 'info');
     try {
         const keyPair = await crypto.subtle.generateKey(
@@ -331,10 +347,23 @@ async function loadOrGenerateRSAKeys() {
         const tx = await keyRegistry.setPublicKey(publicKeyHex);
         await tx.wait();
         showToast('✅ Ключи шифрования сохранены в блокчейне!', 'success');
+        console.log('✅ RSA keys generated and registered');
     } catch (e) {
         console.error('RSA key generation failed:', e);
         showToast('❌ Ошибка генерации ключей', 'error');
     }
+}
+
+// Функция для принудительного обновления ключа (вызывается из настроек)
+async function regenerateEncryptionKeys() {
+    if (!signer) return showToast('Кошелёк не подключён', 'error');
+    if (!confirm('Это сгенерирует НОВУЮ пару ключей. Старые зашифрованные сообщения станут нечитаемыми. Продолжить?')) return;
+
+    // Удаляем старый приватный ключ
+    localStorage.removeItem('rsa_private_key');
+    userRSAKeyPair = null;
+
+    await generateAndRegisterRSAKeys();
 }
 
 // 🔐 Гибридное шифрование (AES + RSA) – возвращает null, если ключ не найден
@@ -344,7 +373,7 @@ async function hybridEncrypt(plaintext, recipientAddress) {
     try {
         publicKeyHex = await keyRegistry.getPublicKey(recipientAddress);
     } catch (e) {
-        return null; // ключ не найден
+        return null;
     }
     if (!publicKeyHex || publicKeyHex === '0x') return null;
 
@@ -413,7 +442,6 @@ async function sendMessage() {
     input.placeholder = '⏳ Подготовка...';
 
     try {
-        // Пытаемся зашифровать
         let encrypted = await hybridEncrypt(plaintext, recipient);
         let messageText, isEncrypted;
 
@@ -421,7 +449,6 @@ async function sendMessage() {
             messageText = JSON.stringify(encrypted);
             isEncrypted = true;
         } else {
-            // Ключ получателя не найден – спрашиваем пользователя
             const userChoice = confirm(
                 '⚠️ У получателя нет публичного ключа шифрования.\n\n' +
                 'Вы можете отправить сообщение открытым текстом (НЕЗАШИФРОВАННЫМ).\n\n' +
@@ -986,6 +1013,30 @@ async function addContactFromInput() {
     }
 }
 
+// 🆕 Открытие модалки настроек с кнопкой обновления ключа
+function openSettingsModal() {
+    // Добавляем в модалку настроек кнопку для регенерации ключа
+    const modal = document.getElementById('settingsModal');
+    if (!modal) return;
+
+    // Проверяем, есть ли уже кнопка
+    if (!document.getElementById('regenerateKeyBtn')) {
+        const btnContainer = document.createElement('div');
+        btnContainer.className = 'mt-4 pt-4 border-t border-white/10';
+        btnContainer.innerHTML = `
+            <p class="text-xs text-zinc-500 mb-2">🔐 Шифрование</p>
+            <button id="regenerateKeyBtn" class="w-full py-3 bg-yellow-400/10 hover:bg-yellow-400/20 text-yellow-400 border border-yellow-400/30 rounded-xl text-sm transition">
+                🔄 Обновить ключ шифрования
+            </button>
+            <p class="text-xs text-zinc-600 mt-1">Старые зашифрованные сообщения станут нечитаемыми</p>
+        `;
+        modal.querySelector('.modal-content').appendChild(btnContainer);
+        document.getElementById('regenerateKeyBtn').onclick = regenerateEncryptionKeys;
+    }
+
+    showModal('settingsModal');
+}
+
 // ─── Глобальный экспорт ──────────────────────────────────────────────────────
 window.selectChat          = selectChat;
 window.sendMessage         = sendMessage;
@@ -1005,3 +1056,4 @@ window.registerUser        = registerUser;
 window.refreshCurrentChat  = refreshCurrentChat;
 window.verifySignature     = verifySignature;
 window.deleteChat          = deleteChat;
+window.openSettingsModal   = openSettingsModal; // переопределяем, чтобы добавить кнопку
