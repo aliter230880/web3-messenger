@@ -1,11 +1,11 @@
-// Web3 Messenger - App Logic v7.3
+// Web3 Messenger - App Logic v7.4
 // ✅ Auto-refresh current chat every 10s
 // ✅ Background discovery of new conversations (every 30s)
-// ✅ Persistent chat deletion (saved to localStorage)
-// ✅ Auto-add contact when receiving message from unknown address
+// ✅ Persistent chat deletion
+// ✅ Fallback to unencrypted message if recipient has no public key
 // ✅ Smooth account change handling
 
-console.log('🚀 Web3 Messenger v7.3 loaded');
+console.log('🚀 Web3 Messenger v7.4 loaded');
 
 if (typeof ethers === 'undefined') {
     console.error('❌ ethers.js не загружен! Проверьте CDN в index.html');
@@ -95,7 +95,6 @@ const store = {
     currentChat: null,
     currentFolder: 'all',
     chats: [
-        // Демо-чаты – можно удалить, состояние сохранится
         { id: 'dima', name: 'Дима', avatar: '👤', online: true, folder: 'personal', unread: 0, messages: [] },
         { id: 'ai', name: 'AI Assistant', avatar: '🤖', online: true, folder: 'work', unread: 0, messages: [] },
         { id: 'crypto', name: 'Crypto News', avatar: '📢', online: false, folder: 'news', unread: 0, messages: [] },
@@ -338,13 +337,16 @@ async function loadOrGenerateRSAKeys() {
     }
 }
 
-// 🔐 Гибридное шифрование (AES + RSA)
+// 🔐 Гибридное шифрование (AES + RSA) – возвращает null, если ключ не найден
 async function hybridEncrypt(plaintext, recipientAddress) {
     const keyRegistry = new ethers.Contract(KEY_REGISTRY_ADDRESS, KEY_REGISTRY_ABI, provider);
-    const publicKeyHex = await keyRegistry.getPublicKey(recipientAddress);
-    if (!publicKeyHex || publicKeyHex === '0x') {
-        throw new Error('У получателя нет публичного ключа');
+    let publicKeyHex;
+    try {
+        publicKeyHex = await keyRegistry.getPublicKey(recipientAddress);
+    } catch (e) {
+        return null; // ключ не найден
     }
+    if (!publicKeyHex || publicKeyHex === '0x') return null;
 
     const publicKeyBytes = new Uint8Array(publicKeyHex.slice(2).match(/.{1,2}/g).map(b => parseInt(b,16)));
     const publicKey = await crypto.subtle.importKey("spki", publicKeyBytes, { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]);
@@ -383,7 +385,7 @@ async function hybridDecrypt(encryptedData) {
     return new TextDecoder().decode(decrypted);
 }
 
-// ─── Подпись и отправка сообщений (с шифрованием) ─────────────────────────────
+// ─── Подпись и отправка сообщений (с fallback-ом на незашифрованное) ─────────
 async function signMessage(text) {
     if (!signer) throw new Error('Кошелёк не подключён');
     return await signer.signMessage(text);
@@ -408,23 +410,43 @@ async function sendMessage() {
     btn.disabled = true;
     input.disabled = true;
     const originalPlaceholder = input.placeholder;
-    input.placeholder = '🔐 Шифрование и подпись...';
+    input.placeholder = '⏳ Подготовка...';
 
     try {
-        showToast('🔐 Шифруем сообщение...', 'info');
-        const encrypted = await hybridEncrypt(plaintext, recipient);
-        const encryptedJSON = JSON.stringify(encrypted);
+        // Пытаемся зашифровать
+        let encrypted = await hybridEncrypt(plaintext, recipient);
+        let messageText, isEncrypted;
 
-        const signature = await signMessage(encryptedJSON);
+        if (encrypted) {
+            messageText = JSON.stringify(encrypted);
+            isEncrypted = true;
+        } else {
+            // Ключ получателя не найден – спрашиваем пользователя
+            const userChoice = confirm(
+                '⚠️ У получателя нет публичного ключа шифрования.\n\n' +
+                'Вы можете отправить сообщение открытым текстом (НЕЗАШИФРОВАННЫМ).\n\n' +
+                'Нажмите "OK", чтобы отправить открыто, или "Отмена", чтобы отменить отправку.'
+            );
+            if (!userChoice) {
+                showToast('❌ Отправка отменена', 'info');
+                return;
+            }
+            messageText = plaintext;
+            isEncrypted = false;
+            showToast('🔓 Отправка незашифрованного сообщения', 'info');
+        }
 
+        input.placeholder = isEncrypted ? '🔐 Подпись...' : '✍️ Подпись...';
+
+        const signature = await signMessage(messageText);
         const msgContract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
-        const tx = await msgContract.sendMessage(recipient, encryptedJSON, signature);
+        const tx = await msgContract.sendMessage(recipient, messageText, signature);
 
         showToast('📤 Транзакция отправлена. Ожидайте...', 'info');
         await tx.wait();
 
         input.value = '';
-        showToast('✅ Сообщение сохранено в блокчейне!', 'success');
+        showToast(isEncrypted ? '✅ Зашифрованное сообщение сохранено!' : '✅ Сообщение сохранено (открытый текст)', 'success');
         await loadMessagesForChat(recipient);
     } catch (e) {
         console.error('Send error:', e);
@@ -437,7 +459,7 @@ async function sendMessage() {
     }
 }
 
-// ─── Загрузка сообщений (с расшифровкой) ──────────────────────────────────────
+// ─── Загрузка сообщений (с определением типа) ─────────────────────────────────
 async function loadMessagesForChat(chatId) {
     if (!signer || !userAddress) return;
 
@@ -453,11 +475,17 @@ async function loadMessagesForChat(chatId) {
         const formatted = [];
         for (const m of allMessages) {
             let displayText = m.text;
+            let isEncrypted = false;
             try {
-                const encrypted = JSON.parse(m.text);
-                displayText = await hybridDecrypt(encrypted);
+                const parsed = JSON.parse(m.text);
+                if (parsed.ciphertext && parsed.encryptedKey && parsed.iv) {
+                    displayText = await hybridDecrypt(parsed);
+                    isEncrypted = true;
+                } else {
+                    displayText = m.text;
+                }
             } catch (e) {
-                displayText = '[Зашифрованное сообщение]';
+                displayText = m.text;
             }
 
             formatted.push({
@@ -468,7 +496,8 @@ async function loadMessagesForChat(chatId) {
                 status: 'delivered',
                 signature: m.signature,
                 sender: m.sender,
-                timestamp: m.timestamp
+                timestamp: m.timestamp,
+                encrypted: isEncrypted
             });
         }
 
@@ -520,19 +549,17 @@ function startAutoRefresh() {
     }, 10000);
 }
 
-// 🆕 Фоновое обнаружение новых переписок
 function startDiscovery() {
     if (discoveryInterval) clearInterval(discoveryInterval);
     discoveryInterval = setInterval(async () => {
         if (!signer || !userAddress) return;
         await discoverNewChats();
-    }, 30000); // каждые 30 секунд
+    }, 30000);
 }
 
 async function discoverNewChats() {
     const msgContract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
     const addressesToCheck = contactsStore.list.map(c => c.address);
-    // также проверим адреса из существующих чатов (вдруг контакт не сохранён)
     store.chats.forEach(chat => {
         if (ethers.utils.isAddress(chat.id) && !addressesToCheck.includes(chat.id)) {
             addressesToCheck.push(chat.id);
@@ -540,11 +567,10 @@ async function discoverNewChats() {
     });
 
     for (const addr of addressesToCheck) {
-        if (deletedChatsStore.has(addr)) continue; // удалённые чаты не восстанавливаем
+        if (deletedChatsStore.has(addr)) continue;
         try {
             const count = await msgContract.messageCount(userAddress, addr);
             if (count.gt(0) && !getChatById(addr)) {
-                // Есть сообщения, но чата нет – создаём
                 const profile = await getProfileByAddress(addr);
                 const name = profile?.username || addr.slice(0, 8) + '...';
                 contactsStore.add({ address: addr, username: profile?.username });
@@ -564,16 +590,13 @@ async function discoverNewChats() {
     }
 }
 
-// ─── Удаление чата ───────────────────────────────────────────────────────────
 function deleteChat(chatId) {
     const index = store.chats.findIndex(c => c.id === chatId);
     if (index === -1) return;
 
-    // Если это контакт, удаляем его из contactsStore
     if (ethers.utils.isAddress(chatId)) {
         contactsStore.remove(chatId);
     }
-    // Помечаем как удалённый, чтобы не восстанавливать
     deletedChatsStore.add(chatId);
 
     store.chats.splice(index, 1);
@@ -619,7 +642,7 @@ function renderChatList() {
     let allChats = [...store.chats];
 
     contactsStore.list.forEach(contact => {
-        if (deletedChatsStore.has(contact.address)) return; // удалённые не показываем
+        if (deletedChatsStore.has(contact.address)) return;
         if (!allChats.find(c => c.id === contact.address)) {
             allChats.push({
                 id: contact.address,
@@ -633,7 +656,6 @@ function renderChatList() {
         }
     });
 
-    // Фильтруем удалённые
     allChats = allChats.filter(chat => !deletedChatsStore.has(chat.id));
 
     const filtered = store.currentFolder === 'all'
@@ -698,8 +720,10 @@ function renderMessages() {
                     ${m.sent ? `
                         <span class="status">${m.status === 'delivered' ? '✓✓' : '⏳'}</span>
                         ${m.signature ? '<span class="sig-badge" title="Подписано кошельком">🔐</span>' : ''}
+                        ${m.encrypted ? '' : '<span class="unencrypted-badge" title="Незашифрованное сообщение">🔓</span>'}
                     ` : `
                         ${m.signature ? '<span class="sig-badge" title="Подписано кошельком" style="cursor:pointer;" onclick="verifySignature(\'' + m.id + '\')">🔐</span>' : ''}
+                        ${m.encrypted ? '' : '<span class="unencrypted-badge" title="Незашифрованное сообщение">🔓</span>'}
                     `}
                 </div>
             </div>
@@ -953,7 +977,6 @@ async function addContactFromInput() {
         } else {
             contactsStore.add({ address });
         }
-        // Убираем из удалённых, если был ранее удалён
         deletedChatsStore.delete(address);
         renderChatList();
         showStatus('✅ Контакт добавлен!', 'success');
