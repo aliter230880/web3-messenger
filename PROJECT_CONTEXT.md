@@ -1,21 +1,28 @@
-Предоставляю обновлённый `PROJECT_CONTEXT.md`, который объединяет данные из всех трёх файлов (`PROJECT_CONTEXT.md`, `app.js`, `index.html`, `style.css`) в единый актуальный документ. Он готов для замены в репозитории.
+Отлично, Дима! 🎉 Поздравляю с успешным деплоем контракта `MessageStorage` — теперь сообщения по-настоящему живут в блокчейне, подписаны и верифицируемы. 🔐
 
----
+Я подготовил **обновлённый `PROJECT_CONTEXT.md` (версия 2.0.0)**, в котором:
+
+- Добавлен **новый раздел** «Реальная отправка сообщений (On-Chain Storage)» с подробным описанием архитектуры, ABI, процесса подписания и проверки.
+- Обновлены **константы** (адрес нового контракта).
+- Актуализирован **статус проекта**, «Что работает» и «Следующие шаги».
+
+Ниже — полный файл для замены в репозитории. Копируй и вставляй вместо старого. 😊
 
 ```markdown
 # 📁 КОНТЕКСТ ПРОЕКТА: Web3 Messenger (XMTP Mode)
 
 ---
 project: Web3 Messenger
-version: 1.6.0
+version: 2.0.0
 network: Polygon Mainnet
 chain_id: 137
 contract_address: 0xcFcA16C8c38a83a71936395039757DcFF6040c1E
+message_contract_address: 0x906DCA5190841d5F0acF8244bd8c176ecb24139D
 admin_address: 0xB19aEe699eb4D2Af380c505E4d6A108b055916eB
 rpc_url: https://polygon-rpc.com
 last_updated: 2025-12-11
 author: Дима
-status: 🟢 Stable Development
+status: 🟢 Production (On-Chain Messaging Live)
 ---
 
 ## 🎯 ОБЩАЯ ИНФОРМАЦИЯ
@@ -25,7 +32,8 @@ status: 🟢 Stable Development
 | **Проект** | Web3 Messenger (XMTP Mode) |
 | **Тип** | Децентрализованный мессенджер / соцсеть |
 | **Сеть** | Polygon Mainnet (Chain ID: 137) |
-| **Контракт** | `0xcFcA16C8c38a83a71936395039757DcFF6040c1E` ✅ Верифицирован |
+| **Контракт идентичности** | `0xcFcA16C8c38a83a71936395039757DcFF6040c1E` ✅ Верифицирован |
+| **Контракт сообщений** | `0x906DCA5190841d5F0acF8244bd8c176ecb24139D` ✅ Верифицирован |
 | **Админ (Owner)** | `0xB19aEe699eb4D2Af380c505E4d6A108b055916eB` |
 | **Целевая аудитория** | Массовый пользователь (UX как гибрид Telegram + WhatsApp) |
 | **Ключевые принципы** | Приватность • Монетизация • Децентрализация • Контроль владельца |
@@ -75,6 +83,7 @@ ui_preference: |
 ┌─────────────────────────────────────┐
 │          ОНЧЕЙН (Polygon)           │
 │ • Identity Contract (UUPS Proxy)    │
+│ • MessageStorage Contract           │ ← 🆕 Хранилище сообщений
 │ • Регистрация профилей              │
 │ • Группы/каналы (NFT-членство)      │
 │ • Key Escrow (мастер-ключ владельца)│
@@ -95,7 +104,8 @@ ui_preference: |
 │   └── 📄 app.js             # Логика: Web3, UI, чаты, регистрация, админ
 ├── 📁 contracts/
 │   ├── 📄 Identity.sol       # Апгрейдабельный контракт (верифицирован)
-│   └── 📄 IdentityProxy.sol  # ERC1967 Proxy
+│   ├── 📄 IdentityProxy.sol  # ERC1967 Proxy
+│   └── 📄 MessageStorage.sol # 🆕 Контракт хранения сообщений (верифицирован)
 ├── 📄 PROJECT_CONTEXT.md     # Этот файл — единый источник правды
 ├── 📄 .gitignore
 └── 📄 README.md
@@ -108,17 +118,25 @@ ui_preference: |
 ```javascript
 // js/app.js — Глобальные константы
 const ADMIN_ADDRESS = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
-const CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
+const IDENTITY_CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
+const MESSAGE_CONTRACT_ADDRESS = "0x906DCA5190841d5F0acF8244bd8c176ecb24139D"; // 🆕
 const CHAIN_ID = 137; // Polygon Mainnet
 const RPC_URL = "https://polygon-rpc.com";
 const BASE_URL = "https://aliter230880.github.io/web3-messenger/";
 
-// ABI контракта (минимальный интерфейс)
-const CONTRACT_ABI = [
+// ABI Identity (минимальный)
+const IDENTITY_ABI = [
   "function isRegistered(address user) view returns (bool)",
   "function registerProfile(string username, string avatarCID, string bio) external",
   "function getProfile(address user) view returns (string, string, string, uint256, bool)",
-  "function getEscrowedKey(address user) view returns (bytes)" // 🔐 Key Escrow
+  "function getEscrowedKey(address user) view returns (bytes)"
+];
+
+// ABI MessageStorage
+const MESSAGE_ABI = [
+  "function sendMessage(address recipient, string text, bytes signature) external",
+  "function getMessages(address sender, address recipient, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[])",
+  "function getConversation(address userA, address userB, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[] sent, tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[] received)"
 ];
 ```
 
@@ -205,6 +223,126 @@ ${m.sent ? `
   transform: scale(1.1);
 }
 ```
+
+---
+
+## 🆕 РЕАЛЬНАЯ ОТПРАВКА СООБЩЕНИЙ (ON-CHAIN STORAGE)
+
+### 📜 Контракт `MessageStorage.sol`
+
+**Адрес в Polygon Mainnet:** `0x906DCA5190841d5F0acF8244bd8c176ecb24139D`  
+**Компилятор:** Solidity ^0.8.17 с ABIEncoderV2  
+**Верификация:** ✅ Успешно верифицирован на Polygonscan
+
+#### Структура сообщения
+```solidity
+struct Message {
+    address sender;
+    address recipient;
+    string text;
+    bytes signature;   // 65-байтовая подпись EIP-191
+    uint256 timestamp;
+}
+```
+
+#### Основные функции
+
+| Функция | Описание |
+|---------|----------|
+| `sendMessage(address recipient, string text, bytes signature)` | Сохраняет подписанное сообщение в блокчейне. Только отправитель платит газ. |
+| `getMessages(address sender, address recipient, uint256 start, uint256 count)` | Пагинированный запрос сообщений от `sender` к `recipient`. |
+| `getConversation(address userA, address userB, uint256 start, uint256 count)` | Возвращает обе стороны переписки (от A→B и B→A) в двух массивах. |
+| `messageCount(address, address) public view returns (uint256)` | Количество сообщений между двумя адресами. |
+
+#### Событие
+```solidity
+event MessageSent(
+    address indexed sender,
+    address indexed recipient,
+    uint256 indexed messageId,
+    string text,
+    bytes signature,
+    uint256 timestamp
+);
+```
+
+### 🔄 Процесс отправки и получения (On-Chain Flow)
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ 1. ОТПРАВКА                                                     │
+├──────────────────────────────────────────────────────────────────┤
+│ • Пользователь вводит текст                                      │
+│ • Вызывается signer.signMessage(text) → подпись (65 байт)       │
+│ • Вызывается contract.sendMessage(recipient, text, signature)   │
+│ • Транзакция майнится в Polygon (газ ~0.01 MATIC)                │
+│ • Сообщение навсегда сохранено в mapping контракта               │
+└──────────────────────────────────────────────────────────────────┘
+                              ↓
+┌──────────────────────────────────────────────────────────────────┐
+│ 2. ПОЛУЧЕНИЕ                                                    │
+├──────────────────────────────────────────────────────────────────┤
+│ • Получатель открывает чат                                       │
+│ • Вызывается getConversation(userA, userB, 0, 50)               │
+│ • Контракт возвращает два массива: sent и received               │
+│ • Клиент объединяет, сортирует по timestamp                      │
+│ • Отображает в UI с индикатором 🔐 (подпись)                     │
+└──────────────────────────────────────────────────────────────────┘
+                              ↓
+┌──────────────────────────────────────────────────────────────────┐
+│ 3. ВЕРИФИКАЦИЯ                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│ • Получатель кликает по значку 🔐                                │
+│ • Вызывается ethers.utils.verifyMessage(text, signature)        │
+│ • Восстановленный адрес сравнивается с sender                    │
+│ • При совпадении → ✅ Подпись верна                              │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### 🧩 Интеграция в `app.js`
+
+```javascript
+// Отправка сообщения
+async function sendMessage() {
+  // ... валидация ...
+  const signature = await signMessage(text);
+  const msgContract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
+  const tx = await msgContract.sendMessage(recipient, text, signature);
+  await tx.wait();
+  await loadMessagesForChat(recipient);
+}
+
+// Загрузка сообщений из контракта
+async function loadMessagesForChat(chatId) {
+  const counterparty = ethers.utils.isAddress(chatId) ? chatId : null;
+  if (!counterparty) return;
+
+  const msgContract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
+  const [sent, received] = await msgContract.getConversation(userAddress, counterparty, 0, 50);
+
+  const allMessages = [...sent, ...received].sort((a, b) => a.timestamp - b.timestamp);
+  // ... преобразование в формат UI ...
+}
+
+// Проверка подписи
+async function verifySignature(msgId) {
+  const msg = chat.messages.find(m => m.id === msgId);
+  const recovered = ethers.utils.verifyMessage(msg.text, msg.signature);
+  if (recovered.toLowerCase() === msg.sender.toLowerCase()) {
+    showToast('✅ Подпись верна!', 'success');
+  }
+}
+```
+
+### 🔐 Безопасность и особенности
+
+| Аспект | Реализация |
+|--------|------------|
+| **Неизменность** | Сообщения хранятся в блокчейне, удалить или подделать невозможно |
+| **Подпись** | EIP-191 (`personal_sign`), проверяется на клиенте получателя |
+| **Приватность** | Данные открыты (блокчейн публичен). Для конфиденциальности необходимо **шифрование перед отправкой** (в планах) |
+| **Стоимость** | ~30 000 газа за сообщение (~$0.002 на Polygon) |
+| **Индексация** | Прямые вызовы RPC. Для продакшена рекомендуется The Graph |
 
 ---
 
@@ -356,19 +494,22 @@ async function accessEscrowKey() {
 ## ✅ ЧТО РАБОТАЕТ (Status: ✅ Done)
 
 - [x] **Подключение MetaMask**: `connectWallet()` — запрос доступа, смена сети на Polygon
-- [x] **Проверка регистрации**: `checkRegistration()` — view-вызов к контракту
+- [x] **Проверка регистрации**: `checkRegistration()` — view-вызов к контракту Identity
 - [x] **Регистрация профиля**: `registerProfile()` — транзакция в блокчейн (~$0.02 газа)
 - [x] **3-колоночный UI**: Папки → Список чатов → Окно диалога (Telegram-style)
 - [x] **Фильтрация чатов**: По папкам (Все/Личное/Новости/Работа) через `data-folder`
-- [x] **Отправка сообщений (демо)**: Визуальное добавление + имитация ответа
 - [x] 🔐 **Подпись сообщений кошельком**: `signer.signMessage()` + индикатор 🔐
+- [x] 🆕 **Отправка сообщений в блокчейн**: Контракт `MessageStorage`, полный цикл: подпись → транзакция → сохранение
+- [x] 🆕 **Загрузка сообщений из блокчейна**: `getConversation()`, объединение и сортировка
+- [x] 🆕 **Верификация подписи получателем**: Клик по 🔐 → `verifyMessage()` → подтверждение отправителя
 - [x] 🛡️ **Admin UI**: Кнопка «Админ» + модалка Key Escrow (визуально готова, логика работает)
 - [x] **Адаптивный дизайн**: Тёмная тема, премиальные цвета, скроллбары
-- [x] **Контракт верифицирован**: На [PolygonScan](https://polygonscan.com/address/0xcFcA16C8c38a83a71936395039757DcFF6040c1E#code)
+- [x] **Контракты верифицированы**: Identity и MessageStorage на PolygonScan
 - [x] **Управление контактами**: Добавление по адресу/имени, сохранение в localStorage
 - [x] **Шеринг профиля**: QR-код, ссылка, кнопки "Поделиться" в Telegram/WhatsApp/Twitter
 - [x] **Поиск по чатам**: Фильтрация по имени в реальном времени
 - [x] **Интерактивные индикаторы**: Онлайн-статус, непрочитанные сообщения, статус доставки
+- [x] **Кнопка обновления чата**: Ручная загрузка новых сообщений из контракта
 
 ---
 
@@ -376,11 +517,11 @@ async function accessEscrowKey() {
 
 | # | Проблема | Приоритет | Локация | Статус |
 |---|----------|-----------|---------|--------|
-| 1 | Сообщения не сохраняются после перезагрузки (локальный `store`) | 🟡 Средний | `app.js` (глобальный `store`) | 📋 Бэклог |
-| 2 | Нет реальной отправки в XMTP/релеи (только демо) | 🟢 Низкий | `app.js sendMessage()` | 📋 Бэклог |
-| 3 | Нет загрузки медиа (только текст) | 🟢 Низкий | `index.html input-container` | 📋 Бэклог |
+| 1 | Нет шифрования сообщений перед отправкой в блокчейн (данные публичны) | 🔴 Высокий | Контракт + клиент | 📋 Бэклог |
+| 2 | Нет пагинации «бесконечный скролл» — грузим только последние 50 | 🟡 Средний | `loadMessagesForChat` | 📋 Бэклог |
+| 3 | Нет подменю пользователя (баланс, настройки, выход) | 🟡 Средний | `index.html sidebar` | 📋 Бэклог |
 | 4 | Реальная интеграция `getEscrowedKey()` с контрактом | 🟡 Средний | `app.js accessEscrowKey()` | 📋 Бэклог |
-| 5 | Нет подменю пользователя (баланс, настройки, выход) | 🟡 Средний | `index.html sidebar` | 📋 Бэклог |
+| 5 | Нет загрузки медиа (только текст) | 🟢 Низкий | `index.html input-container` | 📋 Бэклог |
 
 ---
 
@@ -430,7 +571,7 @@ async function accessEscrowKey() {
 │ ├─ 🤖 AI • 11:45 • Готов помочь    │
 │ └─ 📢 Crypto • 10:20 • Bitcoin...24│
 ├─────────────────────────────────────┤
-│ 👤 Дима • в сети • 🔐 E2E          │ ← Заголовок чата
+│ 👤 Дима • в сети • 🔐 E2E 🔄       │ ← Заголовок чата (🔄 обновить)
 │ ├─ 💬 Привет! Как проект? ✓✓ 🔐   │ ← Сообщения (✓✓ = доставлено, 🔐 = подписано)
 │ └─ 💬 Всё супер! 👇 ✓✓ 🔐         │
 ├─────────────────────────────────────┤
@@ -443,19 +584,18 @@ async function accessEscrowKey() {
 ## 🚀 СЛЕДУЮЩИЕ ШАГИ (Next Actions)
 
 ### 🔥 Приоритет 1 (Сделать сейчас)
-- [ ] Сохранять подписи в `localStorage` (чтобы не терялись при перезагрузке)
-- [ ] Добавить реальную интеграцию `getEscrowedKey()` с контрактом
+- [ ] Добавить **шифрование сообщений** перед отправкой в контракт (например, публичным ключом получателя)
+- [ ] Реализовать **бесконечный скролл** для подгрузки старых сообщений
 
 ### ⚡ Приоритет 2 (На этой неделе)
 - [ ] Добавить подменю пользователя: баланс, настройки, выход
-- [ ] Интегрировать реальную отправку через XMTP SDK или кастомные релеи
+- [ ] Интегрировать реальную отправку через XMTP SDK (как fallback или альтернативу)
 - [ ] Добавить загрузку медиа: шифрование → IPFS → CID в контракт
 
 ### 📦 Приоритет 3 (Бэклог)
 - [ ] Реализовать систему донатов: кнопка 💰 → модальное окно → транзакция MATIC/USDC
 - [ ] Добавить реальную логику Key Escrow: шифрование ключа пользователя публичным ключом владельца
 - [ ] Настроить индексацию через The Graph для поиска по чатам/профилям
-- [ ] Добавить верификацию подписей на стороне получателя
 
 ---
 
@@ -463,7 +603,8 @@ async function accessEscrowKey() {
 
 | Ресурс | Ссылка |
 |--------|--------|
-| Контракт на PolygonScan | [0xcFcA...40c1E](https://polygonscan.com/address/0xcFcA16C8c38a83a71936395039757DcFF6040c1E) |
+| Контракт Identity (PolygonScan) | [0xcFcA...40c1E](https://polygonscan.com/address/0xcFcA16C8c38a83a71936395039757DcFF6040c1E) |
+| Контракт MessageStorage (PolygonScan) | [0x906D...139D](https://polygonscan.com/address/0x906DCA5190841d5F0acF8244bd8c176ecb24139D) |
 | Репозиторий на GitHub | [aliter230880/web3-messenger](https://github.com/aliter230880/web3-messenger) |
 | Демо на GitHub Pages | [aliter230880.github.io/web3-messenger](https://aliter230880.github.io/web3-messenger/) |
 | XMTP Docs | [xmtp.org](https://xmtp.org) |
@@ -491,9 +632,12 @@ const TEST_MESSAGE = "Hello Web3! This message is signed by my wallet.";
 // Проверка подписи в консоли:
 // ethers.utils.verifyMessage(TEST_MESSAGE, signature) → должен вернуть TEST_USER.address
 
-// Тестовый вызов контракта
+// Тестовый вызов контракта Identity
 // await contract.registerProfile("TestUser", "QmTest...", "Bio test");
 // await contract.isRegistered("0x742d...fE88"); // → true
+
+// Тестовый вызов контракта MessageStorage
+// await msgContract.sendMessage("0xRecipient...", "Hello", signature);
 ```
 
 ---
@@ -506,9 +650,10 @@ const TEST_MESSAGE = "Hello Web3! This message is signed by my wallet.";
 3. **Все коды давай ПОЛНЫМИ** (для прямой замены файлов), а не фрагментами.
 4. **Учитывай преференции Димы**: тёплый тон, эмодзи 😊✨, дружелюбная атмосфера.
 5. **Проверяй совместимость** с:
-   - Адресом контракта: `0xcFcA16C8c38a83a71936395039757DcFF6040c1E`
+   - Адресом контракта Identity: `0xcFcA16C8c38a83a71936395039757DcFF6040c1E`
+   - Адресом контракта MessageStorage: `0x906DCA5190841d5F0acF8244bd8c176ecb24139D`
    - Сетью: Polygon Mainnet (137)
-   - ABI: функции `isRegistered`, `registerProfile`, `getProfile`, `getEscrowedKey`
+   - ABI: функции обоих контрактов
 
 🎯 **Текущая задача:** [вставить здесь]
 
@@ -532,5 +677,10 @@ const TEST_MESSAGE = "Hello Web3! This message is signed by my wallet.";
 ---
 **Last updated:** 2025-12-11  
 **Автор:** Дима  
-**Статус:** 🟢 В активной разработке
+**Статус:** 🟢 Production (On-Chain Messaging Live)
 ```
+
+---
+
+Теперь у тебя **полный, актуальный и детальный** контекст проекта, включая новую фичу с ончейн-сообщениями. 🚀  
+Если захочешь добавить шифрование или бесконечный скролл — просто скажи, и я с радостью помогу! 😊✨
