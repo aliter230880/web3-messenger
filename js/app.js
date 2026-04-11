@@ -1,12 +1,13 @@
-// Web3 Messenger - App Logic v7.9
+// Web3 Messenger - App Logic v7.10
 // ✅ Auto-refresh current chat every 10s (no flicker)
 // ✅ Instant discovery of new conversations when message arrives
 // ✅ Persistent chat deletion
 // ✅ All messages sent as plaintext (encryption temporarily disabled)
 // ✅ User avatar menu with profile, contacts, settings, logout
 // ✅ Smooth account change handling
+// ✅ Auto-detect new senders via contract event scanning
 
-console.log('🚀 Web3 Messenger v7.9 loaded (plaintext mode)');
+console.log('🚀 Web3 Messenger v7.10 loaded (auto-discovery enabled)');
 
 if (typeof ethers === 'undefined') {
     console.error('❌ ethers.js не загружен! Проверьте CDN в index.html');
@@ -28,6 +29,15 @@ const MESSAGE_ABI = [
     "function getConversation(address userA, address userB, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[] sent, tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[] received)",
     "function messageCount(address, address) view returns (uint256)"
 ];
+
+// ABI для события MessageSent (автоопределение новых отправителей)
+const MESSAGE_SENT_EVENT_ABI = [
+    "event MessageSent(address indexed sender, address indexed recipient, uint256 timestamp)"
+];
+
+// Переменные для сканирования блоков
+let lastScannedBlock = 0;
+const SCAN_BLOCKS_BACK = 10000; // примерно 5-6 часов на Polygon
 
 // ─── Хранилище контактов ────────────────────────────────────────────────────
 const contactsStore = {
@@ -109,6 +119,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log('✅ App initialized');
     contactsStore.load();
     deletedChatsStore.load();
+    
+    // Загружаем последний отсканированный блок
+    try {
+        const savedBlock = localStorage.getItem('web3messenger_lastScannedBlock');
+        if (savedBlock) lastScannedBlock = parseInt(savedBlock);
+    } catch (e) {}
+    
     renderSidebar();
     renderChatList();
     setupEventListeners();
@@ -452,46 +469,88 @@ function startAutoRefresh() {
     }, 10000);
 }
 
-// Фоновое обнаружение (на случай, если сообщение пришло, а чат не открыт)
-function startDiscovery() {
-    if (discoveryInterval) clearInterval(discoveryInterval);
-    discoveryInterval = setInterval(async () => {
-        if (!signer || !userAddress) return;
-        await discoverNewChats();
-    }, 30000);
-}
-
-async function discoverNewChats() {
-    const msgContract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
-    const addressesToCheck = contactsStore.list.map(c => c.address);
-    store.chats.forEach(chat => {
-        if (ethers.utils.isAddress(chat.id) && !addressesToCheck.includes(chat.id)) {
-            addressesToCheck.push(chat.id);
+// Фоновое сканирование событий для поиска новых отправителей
+async function scanForNewSenders() {
+    if (!provider || !userAddress) return;
+    
+    try {
+        const currentBlock = await provider.getBlockNumber();
+        // Если это первый запуск, смотрим SCAN_BLOCKS_BACK блоков назад
+        const fromBlock = lastScannedBlock > 0 ? lastScannedBlock + 1 : Math.max(0, currentBlock - SCAN_BLOCKS_BACK);
+        if (fromBlock > currentBlock) return;
+        
+        const contract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_SENT_EVENT_ABI, provider);
+        
+        // Фильтр: события, где recipient = userAddress
+        const filter = contract.filters.MessageSent(null, userAddress);
+        const events = await contract.queryFilter(filter, fromBlock, currentBlock);
+        
+        const newSenders = new Set();
+        for (const ev of events) {
+            const sender = ev.args.sender;
+            if (sender.toLowerCase() !== userAddress.toLowerCase()) {
+                newSenders.add(sender);
+            }
         }
-    });
-
-    for (const addr of addressesToCheck) {
-        if (deletedChatsStore.has(addr)) continue;
-        try {
-            const count = await msgContract.messageCount(userAddress, addr);
-            if (count.gt(0) && !getChatById(addr)) {
-                const profile = await getProfileByAddress(addr);
-                const name = profile?.username || addr.slice(0, 8) + '...';
-                contactsStore.add({ address: addr, username: profile?.username });
-                store.chats.push({
-                    id: addr,
+        
+        // Создаём чаты для новых отправителей
+        for (const sender of newSenders) {
+            if (deletedChatsStore.has(sender)) continue;
+            
+            let chat = getChatById(sender);
+            if (!chat) {
+                // Проверяем, есть ли уже в контактах
+                let contact = contactsStore.get(sender);
+                if (!contact) {
+                    // Пытаемся получить профиль
+                    const profile = await getProfileByAddress(sender);
+                    contact = { address: sender, username: profile?.username };
+                    contactsStore.add(contact);
+                }
+                
+                const name = contact.username || sender.slice(0, 8) + '...';
+                chat = {
+                    id: sender,
                     name: name,
                     avatar: '👤',
                     online: false,
                     folder: 'personal',
                     messages: [],
-                    isContact: true
-                });
-                renderChatList();
-                console.log(`🆕 Обнаружен новый чат с ${addr}`);
+                    isContact: true,
+                    preview: 'Новое сообщение',
+                    time: 'сейчас'
+                };
+                store.chats.push(chat);
+                console.log(`🆕 Автоматически создан чат с ${sender}`);
             }
-        } catch (e) { /* игнорируем */ }
+            
+            // Загружаем сообщения для этого чата (чтобы показать превью)
+            await loadMessagesForChat(sender);
+        }
+        
+        // Обновляем интерфейс, если были изменения
+        if (newSenders.size > 0) {
+            renderChatList();
+            showToast(`🔔 Найдены новые сообщения от ${newSenders.size} контактов`, 'info');
+        }
+        
+        // Сохраняем последний проверенный блок
+        lastScannedBlock = currentBlock;
+        localStorage.setItem('web3messenger_lastScannedBlock', currentBlock.toString());
+        
+    } catch (e) {
+        console.warn('Ошибка сканирования событий:', e);
     }
+}
+
+function startDiscovery() {
+    if (discoveryInterval) clearInterval(discoveryInterval);
+    // Запускаем сразу при старте
+    scanForNewSenders();
+    // Затем каждые 30 секунд
+    discoveryInterval = setInterval(() => {
+        scanForNewSenders();
+    }, 30000);
 }
 
 function deleteChat(chatId) {
@@ -998,3 +1057,4 @@ window.toggleUserMenu      = toggleUserMenu;
 window.openProfileModal    = openProfileModal;
 window.openContactsModal   = openContactsModal;
 window.logout              = logout;
+window.scanForNewSenders   = scanForNewSenders;
