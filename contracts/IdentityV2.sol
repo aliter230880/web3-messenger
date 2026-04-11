@@ -28,7 +28,8 @@ contract IdentityV2 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // --- Инициализатор (вызывается один раз через прокси) ---
     function initialize() public initializer {
         __Ownable_init();
-        __UUPSUpgradeable_init();
+        // __UUPSUpgradeable_init() отсутствует в версии OpenZeppelin 4.9.x,
+        // поэтому не вызываем — это не влияет на работу UUPS.
     }
 
     // --- Обязательная функция для UUPS ---
