@@ -1,7 +1,7 @@
-// Web3 Messenger - App Logic v5
-// ✅ Contacts + Share Profile + Wallet Signature + Admin UI + Registration
+// Web3 Messenger - App Logic v6
+// ✅ Real on-chain messaging with wallet signatures
 
-console.log('🚀 Web3 Messenger loaded');
+console.log('🚀 Web3 Messenger v6 loaded');
 
 if (typeof ethers === 'undefined') {
     console.error('❌ ethers.js не загружен! Проверьте CDN в index.html');
@@ -12,8 +12,16 @@ let provider, signer, userAddress;
 let isAdmin = false;
 let currentUsername = '';
 const ADMIN_ADDRESS    = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
-const CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
+const IDENTITY_CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
+const MESSAGE_CONTRACT_ADDRESS = "0x906DCA5190841d5F0acF8244bd8c176ecb24139D"; // ← ЗАМЕНИ ПОСЛЕ ДЕПЛОЯ
 const BASE_URL         = "https://aliter230880.github.io/web3-messenger/";
+
+// ABI MessageStorage (минимальный)
+const MESSAGE_ABI = [
+    "function sendMessage(address recipient, string text, bytes signature) external",
+    "function getMessages(address sender, address recipient, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[])",
+    "function getConversation(address userA, address userB, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[] sent, tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[] received)"
+];
 
 // ─── Хранилище контактов ────────────────────────────────────────────────────
 const contactsStore = {
@@ -42,23 +50,18 @@ const contactsStore = {
     }
 };
 
-// ─── Данные чатов ───────────────────────────────────────────────────────────
+// ─── Данные чатов (теперь сообщения загружаются из контракта) ───────────────
 const store = {
     currentChat: null,
     currentFolder: 'all',
     chats: [
-        {
-            id: 'dima', name: 'Дима', avatar: '👤', online: true, folder: 'personal',
-            preview: 'Привет!', time: '12:30', unread: 3,
-            messages: [
-                { id: 1, text: 'Привет! Как проект?', sent: false, time: '12:28', status: 'delivered', signature: null }
-            ]
-        },
-        { id: 'ai',      name: 'AI Assistant',  avatar: '🤖', online: true,  folder: 'work', preview: 'Готов помочь',         time: '11:45', unread: 0,  messages: [] },
-        { id: 'crypto',  name: 'Crypto News',   avatar: '📢', online: false, folder: 'news', preview: 'BTC $100k!',           time: '10:20', unread: 24, messages: [] },
-        { id: 'devteam', name: 'Dev Team',      avatar: '💻', online: true,  folder: 'work', preview: 'Контракт задеплоен',   time: '09:55', unread: 5,  messages: [] },
-        { id: 'poly',    name: 'Polygon Alerts',avatar: '🔷', online: false, folder: 'news', preview: 'Gas price: 35 gwei',   time: '08:30', unread: 11, messages: [] },
-    ]
+        // Демо чаты остаются для примера, но реальные будут добавляться из контактов
+        { id: 'dima', name: 'Дима', avatar: '👤', online: true, folder: 'personal', unread: 0, messages: [] },
+        { id: 'ai', name: 'AI Assistant', avatar: '🤖', online: true, folder: 'work', unread: 0, messages: [] },
+        { id: 'crypto', name: 'Crypto News', avatar: '📢', online: false, folder: 'news', unread: 0, messages: [] },
+    ],
+    // Кэш сообщений из контракта
+    messageCache: {}
 };
 
 // ─── Инициализация ───────────────────────────────────────────────────────────
@@ -97,7 +100,7 @@ async function handleContactParam() {
 async function getProfileByAddress(address) {
     if (!provider) return null;
     try {
-        const contract = new ethers.Contract(CONTRACT_ADDRESS, [
+        const contract = new ethers.Contract(IDENTITY_CONTRACT_ADDRESS, [
             "function getProfile(address) view returns (string,string,string,uint256,bool)"
         ], provider);
         const result = await contract.getProfile(address);
@@ -164,7 +167,7 @@ async function connectWallet() {
 async function checkRegistration() {
     if (!provider || !userAddress) return;
     try {
-        const contract = new ethers.Contract(CONTRACT_ADDRESS, [
+        const contract = new ethers.Contract(IDENTITY_CONTRACT_ADDRESS, [
             "function isRegistered(address) view returns (bool)"
         ], provider);
         const registered = await contract.isRegistered(userAddress);
@@ -226,7 +229,7 @@ async function registerUser() {
     msgEl.className   = 'status-msg info';
 
     try {
-        const contract = new ethers.Contract(CONTRACT_ADDRESS, [
+        const contract = new ethers.Contract(IDENTITY_CONTRACT_ADDRESS, [
             "function registerProfile(string username, string avatarCID, string bio) external"
         ], signer);
         const tx = await contract.registerProfile(username, '', '');
@@ -280,10 +283,7 @@ async function accessEscrowKey() {
     statusEl.style.display = 'block';
 
     try {
-        // 🔐 Реальный вызов (когда функция будет в контракте):
-        // const contract = new ethers.Contract(CONTRACT_ADDRESS, ["function getEscrowedKey(address) view returns (bytes)"], signer);
-        // const encryptedKey = await contract.getEscrowedKey(userAddr);
-
+        // В реальности вызов getEscrowedKey()
         await new Promise(r => setTimeout(r, 1200));
         const mockKey = "0x" + Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('');
 
@@ -359,9 +359,8 @@ async function addContactFromInput() {
 
         let address = query;
         if (!ethers.utils.isAddress(query)) {
-            const resolved = await resolveUsername(query);
-            if (resolved) address = resolved;
-            else throw new Error('Пользователь не найден');
+            // Здесь может быть разрешение по username
+            throw new Error('Введите корректный адрес');
         }
 
         const profile = await getProfileByAddress(address);
@@ -387,11 +386,7 @@ async function addContactFromInput() {
     }
 }
 
-async function resolveUsername(username) {
-    return null;
-}
-
-// ─── Подпись и отправка сообщений ────────────────────────────────────────────
+// ─── Подпись и отправка сообщений (ON-CHAIN) ─────────────────────────────────
 async function signMessage(text) {
     if (!signer) throw new Error('Кошелёк не подключён');
     return await signer.signMessage(text);
@@ -401,44 +396,125 @@ async function sendMessage() {
     const input = document.getElementById('msg-input');
     const text  = input.value.trim();
     if (!text || !store.currentChat) return;
-
     if (!signer) { openModal('wallet-modal'); return; }
 
-    const chat = store.chats.find(c => c.id === store.currentChat);
-    const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    const chat = getChatById(store.currentChat);
+    if (!chat) return;
+
+    // Определяем адрес получателя: если чат с контактом, то id = адрес
+    const recipient = ethers.utils.isAddress(chat.id) ? chat.id : null;
+    if (!recipient) {
+        showToast('❌ Чат не является контактом (нет адреса)', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('send-btn');
+    btn.disabled = true;
+    input.disabled = true;
+    const originalPlaceholder = input.placeholder;
+    input.placeholder = '⏳ Подписание и отправка...';
 
     try {
-        const msg = { id: Date.now(), text, sent: true, time, status: 'sending', signature: null };
-        chat.messages.push(msg);
-        chat.preview = text;
-        chat.time    = time;
-        input.value  = '';
-        renderMessages();
-
+        // 1. Подписываем сообщение
         const signature = await signMessage(text);
-        msg.signature   = signature;
-        msg.status      = 'delivered';
-        renderMessages();
-        console.log('✅ Signed:', signature.slice(0, 20) + '...');
 
-        setTimeout(() => {
-            const reply = {
-                id: Date.now() + 1,
-                text: '👍 Принято!',
-                sent: false,
-                time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-                status: 'delivered',
-                signature: null
-            };
-            chat.messages.push(reply);
-            chat.preview = reply.text;
-            if (store.currentChat === chat.id) renderMessages();
-        }, 1500);
-
+        // 2. Отправляем в смарт-контракт
+        const msgContract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
+        const tx = await msgContract.sendMessage(recipient, text, signature);
+        
+        showToast('📤 Транзакция отправлена. Ожидайте подтверждения...', 'info');
+        await tx.wait();
+        
+        // 3. Очищаем поле и обновляем чат
+        input.value = '';
+        showToast('✅ Сообщение сохранено в блокчейне!', 'success');
+        
+        // 4. Загружаем свежие сообщения из контракта
+        await loadMessagesForChat(recipient);
+        
     } catch (e) {
         console.error('Send error:', e);
-        if (e.code !== 4001) alert('Ошибка отправки: ' + e.message);
+        showToast('❌ Ошибка: ' + (e.reason || e.message), 'error');
+    } finally {
+        btn.disabled = false;
+        input.disabled = false;
+        input.placeholder = originalPlaceholder;
+        input.focus();
     }
+}
+
+// ─── Загрузка сообщений из контракта ─────────────────────────────────────────
+async function loadMessagesForChat(chatId) {
+    if (!signer || !userAddress) return;
+    
+    // Определяем адрес собеседника (если чат не контакт, пропускаем)
+    const counterparty = ethers.utils.isAddress(chatId) ? chatId : null;
+    if (!counterparty) return;
+
+    try {
+        const msgContract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
+        // Получаем всю переписку между userAddress и counterparty
+        const [sent, received] = await msgContract.getConversation(userAddress, counterparty, 0, 50);
+        
+        // Объединяем и сортируем по времени
+        const allMessages = [...sent, ...received].sort((a, b) => a.timestamp - b.timestamp);
+        
+        // Преобразуем в формат UI
+        const formatted = allMessages.map(m => ({
+            id: m.timestamp.toString() + m.sender,
+            text: m.text,
+            sent: m.sender.toLowerCase() === userAddress.toLowerCase(),
+            time: new Date(m.timestamp * 1000).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+            status: 'delivered', // on-chain считается доставленным
+            signature: m.signature,
+            sender: m.sender,
+            timestamp: m.timestamp
+        }));
+        
+        // Обновляем чат
+        let chat = getChatById(chatId);
+        if (!chat) {
+            // Создаём чат на лету
+            const profile = await getProfileByAddress(counterparty);
+            const name = profile?.username || counterparty.slice(0, 8) + '...';
+            chat = {
+                id: counterparty,
+                name: name,
+                avatar: '👤',
+                online: false,
+                folder: 'personal',
+                messages: [],
+                isContact: true
+            };
+            store.chats.push(chat);
+        }
+        chat.messages = formatted;
+        if (formatted.length > 0) {
+            const last = formatted[formatted.length-1];
+            chat.preview = last.text;
+            chat.time = last.time;
+        }
+        
+        if (store.currentChat === chatId) {
+            renderMessages();
+        }
+        renderChatList();
+        
+    } catch (e) {
+        console.error('Load messages error:', e);
+    }
+}
+
+// Функция обновления текущего чата (вызывается по кнопке "Обновить")
+async function refreshCurrentChat() {
+    if (!store.currentChat) return;
+    await loadMessagesForChat(store.currentChat);
+    showToast('🔄 Чат обновлён', 'info');
+}
+
+// Вспомогательная: получить объект чата по id
+function getChatById(id) {
+    return store.chats.find(c => c.id === id);
 }
 
 // ─── Рендеринг ───────────────────────────────────────────────────────────────
@@ -506,29 +582,37 @@ function renderChatList() {
 
 function selectChat(id) {
     store.currentChat = id;
-    const allChats = [...store.chats, ...contactsStore.list.map(c => ({
-        id: c.address, name: c.username || c.address.slice(0, 8) + '...', avatar: '👤',
-        online: false, messages: [], ...c
-    }))];
-    const chat = allChats.find(c => c.id === id);
+    const chat = getChatById(id);
     if (chat) {
         chat.unread = 0;
         document.getElementById('chat-name').textContent   = chat.name || id.slice(0, 8) + '...';
         document.getElementById('chat-status').textContent = chat.online ? '● в сети' : 'был недавно';
         document.getElementById('chat-avatar').textContent = chat.avatar || '👤';
         renderChatList();
-        renderMessages();
+        // Загружаем сообщения из блокчейна
+        loadMessagesForChat(id);
         updateInputState();
     }
 }
 
 function renderMessages() {
     const container = document.getElementById('messages-container');
-    const chat      = store.chats.find(c => c.id === store.currentChat);
+    const chat      = getChatById(store.currentChat);
     if (!container || !chat) return;
 
+    if (!chat.messages || chat.messages.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">💬</div>
+                <h3>Нет сообщений</h3>
+                <p>Напишите первое сообщение!</p>
+            </div>
+        `;
+        return;
+    }
+
     container.innerHTML = `
-        <div class="date-separator"><span>Сегодня</span></div>
+        <div class="date-separator"><span>Последние сообщения</span></div>
         ${chat.messages.map(m => `
             <div class="message ${m.sent ? 'sent' : 'received'}">
                 <div class="message-text">${escapeHtml(m.text)}</div>
@@ -537,12 +621,33 @@ function renderMessages() {
                     ${m.sent ? `
                         <span class="status">${m.status === 'delivered' ? '✓✓' : '⏳'}</span>
                         ${m.signature ? '<span class="sig-badge" title="Подписано кошельком">🔐</span>' : ''}
-                    ` : ''}
+                    ` : `
+                        ${m.signature ? '<span class="sig-badge" title="Подписано кошельком" style="cursor:pointer;" onclick="verifySignature(\'' + m.id + '\')">🔐</span>' : ''}
+                    `}
                 </div>
             </div>
         `).join('')}
     `;
     container.scrollTop = container.scrollHeight;
+}
+
+// Проверка подписи (для полученных сообщений)
+async function verifySignature(msgId) {
+    const chat = getChatById(store.currentChat);
+    if (!chat) return;
+    const msg = chat.messages.find(m => m.id === msgId);
+    if (!msg || !msg.signature) return;
+    
+    try {
+        const recovered = ethers.utils.verifyMessage(msg.text, msg.signature);
+        if (recovered.toLowerCase() === msg.sender.toLowerCase()) {
+            showToast('✅ Подпись верна! Отправитель подтверждён.', 'success');
+        } else {
+            showToast('⚠️ Подпись недействительна!', 'error');
+        }
+    } catch (e) {
+        showToast('❌ Ошибка проверки подписи', 'error');
+    }
 }
 
 function renderEmptyState() {
@@ -591,6 +696,7 @@ function setupEventListeners() {
     document.getElementById('msg-input').onkeypress = e => { if (e.key === 'Enter') sendMessage(); };
     document.getElementById('wallet-btn').onclick   = () => openModal('wallet-modal');
     document.getElementById('connect-btn').onclick  = connectWallet;
+    document.getElementById('refresh-chat-btn').onclick = refreshCurrentChat;
 
     document.getElementById('search-input').oninput = e => {
         const query = e.target.value.toLowerCase();
@@ -642,7 +748,7 @@ function escapeHtml(t) {
     return d.innerHTML;
 }
 
-// ─── Глобальный экспорт (onclick-атрибуты в HTML) ────────────────────────────
+// ─── Глобальный экспорт ──────────────────────────────────────────────────────
 window.selectChat          = selectChat;
 window.sendMessage         = sendMessage;
 window.connectWallet       = connectWallet;
@@ -658,3 +764,5 @@ window.closeModal          = closeModal;
 window.openRegisterModal   = openRegisterModal;
 window.closeRegisterModal  = closeRegisterModal;
 window.registerUser        = registerUser;
+window.refreshCurrentChat  = refreshCurrentChat;
+window.verifySignature     = verifySignature;
