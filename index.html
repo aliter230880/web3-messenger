@@ -60,6 +60,8 @@
                 <div class="encryption-badge">🔐 E2E</div>
                 <button class="icon-btn" id="refresh-chat-btn" title="Обновить чат из блокчейна" onclick="refreshCurrentChat()">🔄</button>
                 <button class="share-btn" id="share-profile-btn" title="Поделиться профилем" style="display:none;" onclick="openShareModal()">🔗</button>
+                <!-- Кнопка настроек теперь вызывает openSettingsModal -->
+                <button class="icon-btn" id="settings-btn" title="Настройки" onclick="openSettingsModal()">⚙️</button>
             </div>
             <div class="messages-container" id="messages-container">
                 <div class="empty-state">
@@ -79,7 +81,7 @@
         </main>
     </div>
 
-    <!-- Модалки (без изменений) -->
+    <!-- Wallet Modal -->
     <div id="wallet-modal" class="modal" style="display:none;">
         <div class="modal-content">
             <h3>🔗 Подключить кошелёк</h3>
@@ -90,6 +92,7 @@
         </div>
     </div>
 
+    <!-- Register Modal -->
     <div id="register-modal" class="modal" style="display:none;">
         <div class="modal-content">
             <div class="register-avatar-placeholder">👤</div>
@@ -104,6 +107,7 @@
         </div>
     </div>
 
+    <!-- Admin Modal: Key Escrow -->
     <div id="admin-modal" class="modal" style="display:none;">
         <div class="modal-content">
             <h3>🛡️ Админ-панель: Key Escrow</h3>
@@ -115,6 +119,7 @@
         </div>
     </div>
 
+    <!-- Share Profile Modal -->
     <div id="share-modal" class="modal" style="display:none;">
         <div class="modal-content">
             <h3>🔗 Поделиться профилем</h3>
@@ -133,8 +138,79 @@
         </div>
     </div>
 
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <h3>⚙️ Настройки</h3>
+            <div class="mb-5">
+                <label class="text-zinc-400 text-xs mb-1.5 block">Сеть</label>
+                <select id="settingsNetwork" onchange="wallet.changeNetwork(parseInt(this.value))" class="input-field">
+                    <option value="137">Polygon</option>
+                    <option value="1">Ethereum Mainnet</option>
+                    <option value="56">BSC</option>
+                    <option value="5">Goerli Testnet</option>
+                    <option value="80001">Mumbai Testnet</option>
+                </select>
+            </div>
+            <div class="h-px bg-white/8 my-4"></div>
+            <div class="mb-4">
+                <div class="flex justify-between items-center mb-2">
+                    <label class="text-zinc-400 text-xs">Приватный ключ</label>
+                    <button id="pkShowBtn" onclick="exportPrivateKey()" class="text-xs text-yellow-400 hover:text-yellow-300 transition">Показать ↓</button>
+                </div>
+                <div id="pkSection" class="hidden">
+                    <div class="relative mb-2">
+                        <input type="password" id="pkInput" readonly class="input-field pr-16 font-mono text-xs">
+                        <button onclick="togglePkVisibility()" id="pkToggleBtn" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-400 hover:text-white transition">Показать</button>
+                    </div>
+                    <button onclick="copyPrivateKey()" class="text-xs text-zinc-500 hover:text-yellow-400 transition">📋 Копировать приватный ключ</button>
+                </div>
+            </div>
+            <div id="mnemonicSettingsGroup" class="hidden mb-4">
+                <label class="text-zinc-400 text-xs mb-1.5 block">Seed-фраза</label>
+                <input type="text" id="mnemonicInputSettings" readonly class="input-field font-mono text-xs mb-2">
+                <button onclick="copyMnemonicSettings()" class="text-xs text-zinc-500 hover:text-yellow-400 transition">📋 Копировать seed-фразу</button>
+            </div>
+            <div class="h-px bg-white/8 my-4"></div>
+            <button onclick="showModal('changePasswordModal')" class="w-full py-3.5 glass border border-white/10 hover:border-white/20 rounded-2xl text-sm transition mb-3">
+                🔒 Сменить пароль
+            </button>
+            <button onclick="clearAllData()" class="w-full py-3.5 bg-red-500/8 hover:bg-red-500/12 border border-red-500/20 text-red-400 rounded-2xl text-sm transition">
+                🗑️ Сбросить все данные
+            </button>
+            <!-- Кнопка "Обновить ключ шифрования" будет добавлена динамически через openSettingsModal() -->
+            <button class="btn-secondary" onclick="closeModal('settingsModal')">Закрыть</button>
+        </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div id="changePasswordModal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-5">
+                <h3 class="text-lg font-bold">Сменить пароль</h3>
+                <button onclick="closeModal('changePasswordModal')" class="text-zinc-500 hover:text-white text-2xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition">&times;</button>
+            </div>
+            <div class="mb-3">
+                <label class="text-zinc-400 text-xs mb-1.5 block">Текущий пароль</label>
+                <input type="password" id="currentPasswordInput" class="input-field" placeholder="••••••••">
+            </div>
+            <div class="mb-3">
+                <label class="text-zinc-400 text-xs mb-1.5 block">Новый пароль</label>
+                <input type="password" id="newPasswordChangeInput" class="input-field" placeholder="••••••••">
+            </div>
+            <div class="mb-5">
+                <label class="text-zinc-400 text-xs mb-1.5 block">Подтвердите пароль</label>
+                <input type="password" id="confirmPasswordChangeInput" class="input-field" placeholder="••••••••" onkeypress="if(event.key==='Enter')wallet.changePasswordWithUI()">
+            </div>
+            <button onclick="wallet.changePasswordWithUI()" class="w-full py-4 bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold rounded-2xl transition">
+                Сменить пароль
+            </button>
+        </div>
+    </div>
+
     <script src="js/app.js"></script>
     <script>
+        // Подставляем адрес кошелька в форму регистрации
         document.addEventListener('DOMContentLoaded', () => {
             const orig = window.openRegisterModal;
             window.openRegisterModal = function() {
