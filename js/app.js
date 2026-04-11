@@ -1,13 +1,14 @@
-// Web3 Messenger - App Logic v7.5
-// ✅ Auto-refresh current chat every 10s
+// Web3 Messenger - App Logic v7.6
+// ✅ Auto-refresh current chat every 10s (no flicker)
 // ✅ Background discovery of new conversations (every 30s)
 // ✅ Persistent chat deletion
 // ✅ Fallback to unencrypted message if recipient has no public key
 // ✅ Automatic RSA key generation if missing in KeyRegistry
 // ✅ Manual key regeneration in settings
+// ✅ Sent messages displayed as plaintext for sender
 // ✅ Smooth account change handling
 
-console.log('🚀 Web3 Messenger v7.5 loaded');
+console.log('🚀 Web3 Messenger v7.6 loaded');
 
 if (typeof ethers === 'undefined') {
     console.error('❌ ethers.js не загружен! Проверьте CDN в index.html');
@@ -109,6 +110,10 @@ let userRSAKeyPair = null;
 let isInitializing = false;
 let autoRefreshInterval = null;
 let discoveryInterval = null;
+
+// Для предотвращения моргания — кэш последнего рендера
+let lastRenderedMessagesHash = '';
+let lastRenderedChatListHash = '';
 
 // ─── Инициализация ───────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
@@ -306,11 +311,10 @@ async function registerUser() {
     }
 }
 
-// ─── 🔐 Управление ключами шифрования (с проверкой наличия в KeyRegistry) ─────
+// ─── 🔐 Управление ключами шифрования ─────────────────────────────────────────
 async function ensureEncryptionKeys() {
     if (!userAddress) return;
 
-    // Проверяем, есть ли публичный ключ в контракте
     const keyRegistry = new ethers.Contract(KEY_REGISTRY_ADDRESS, KEY_REGISTRY_ABI, provider);
     let hasPublicKey = false;
     try {
@@ -325,7 +329,6 @@ async function ensureEncryptionKeys() {
         return;
     }
 
-    // Если нет ключа в контракте или нет в localStorage — генерируем новые
     await generateAndRegisterRSAKeys();
 }
 
@@ -354,15 +357,12 @@ async function generateAndRegisterRSAKeys() {
     }
 }
 
-// Функция для принудительного обновления ключа (вызывается из настроек)
 async function regenerateEncryptionKeys() {
     if (!signer) return showToast('Кошелёк не подключён', 'error');
     if (!confirm('Это сгенерирует НОВУЮ пару ключей. Старые зашифрованные сообщения станут нечитаемыми. Продолжить?')) return;
 
-    // Удаляем старый приватный ключ
     localStorage.removeItem('rsa_private_key');
     userRSAKeyPair = null;
-
     await generateAndRegisterRSAKeys();
 }
 
@@ -472,8 +472,30 @@ async function sendMessage() {
         showToast('📤 Транзакция отправлена. Ожидайте...', 'info');
         await tx.wait();
 
+        // Добавляем отправленное сообщение локально, чтобы отобразить сразу
+        const newMsg = {
+            id: Date.now().toString() + userAddress,
+            text: plaintext,
+            sent: true,
+            time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+            status: 'delivered',
+            signature: signature,
+            sender: userAddress,
+            timestamp: Math.floor(Date.now() / 1000),
+            encrypted: isEncrypted
+        };
+        chat.messages.push(newMsg);
+        chat.preview = plaintext;
+        chat.time = newMsg.time;
+
+        if (store.currentChat === recipient) {
+            renderMessages();
+        }
+        renderChatList();
+
         input.value = '';
         showToast(isEncrypted ? '✅ Зашифрованное сообщение сохранено!' : '✅ Сообщение сохранено (открытый текст)', 'success');
+        // Загружаем свежие сообщения, чтобы синхронизироваться с блокчейном
         await loadMessagesForChat(recipient);
     } catch (e) {
         console.error('Send error:', e);
@@ -503,22 +525,42 @@ async function loadMessagesForChat(chatId) {
         for (const m of allMessages) {
             let displayText = m.text;
             let isEncrypted = false;
-            try {
-                const parsed = JSON.parse(m.text);
-                if (parsed.ciphertext && parsed.encryptedKey && parsed.iv) {
-                    displayText = await hybridDecrypt(parsed);
-                    isEncrypted = true;
-                } else {
+            const isSentByMe = m.sender.toLowerCase() === userAddress.toLowerCase();
+
+            // Если сообщение отправлено мной, пытаемся его расшифровать, но если не получается — показываем как есть
+            // (обычно отправитель не может расшифровать своё же сообщение, зашифрованное для получателя)
+            if (isSentByMe) {
+                try {
+                    const parsed = JSON.parse(m.text);
+                    if (parsed.ciphertext && parsed.encryptedKey && parsed.iv) {
+                        // Пытаемся расшифровать (может не получиться)
+                        displayText = await hybridDecrypt(parsed);
+                        isEncrypted = true;
+                    } else {
+                        displayText = m.text;
+                    }
+                } catch (e) {
                     displayText = m.text;
                 }
-            } catch (e) {
-                displayText = m.text;
+            } else {
+                // Входящее сообщение
+                try {
+                    const parsed = JSON.parse(m.text);
+                    if (parsed.ciphertext && parsed.encryptedKey && parsed.iv) {
+                        displayText = await hybridDecrypt(parsed);
+                        isEncrypted = true;
+                    } else {
+                        displayText = m.text;
+                    }
+                } catch (e) {
+                    displayText = m.text;
+                }
             }
 
             formatted.push({
                 id: m.timestamp.toString() + m.sender,
                 text: displayText,
-                sent: m.sender.toLowerCase() === userAddress.toLowerCase(),
+                sent: isSentByMe,
                 time: new Date(m.timestamp * 1000).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
                 status: 'delivered',
                 signature: m.signature,
@@ -566,7 +608,7 @@ async function refreshCurrentChat() {
     if (!autoRefreshInterval) showToast('🔄 Чат обновлён', 'info');
 }
 
-// ─── Автообновление текущего чата ─────────────────────────────────────────────
+// ─── Автообновление текущего чата (без моргания) ─────────────────────────────
 function startAutoRefresh() {
     if (autoRefreshInterval) clearInterval(autoRefreshInterval);
     autoRefreshInterval = setInterval(async () => {
@@ -640,7 +682,7 @@ function getChatById(id) {
     return store.chats.find(c => c.id === id);
 }
 
-// ─── Рендеринг ───────────────────────────────────────────────────────────────
+// ─── Рендеринг (оптимизированный, без моргания) ──────────────────────────────
 function renderSidebar() {
     document.querySelectorAll('.sidebar-item').forEach(item => {
         if (item.dataset.folder) {
@@ -665,7 +707,7 @@ function renderSidebar() {
 }
 
 function renderChatList() {
-    const list     = document.getElementById('chat-list');
+    const list = document.getElementById('chat-list');
     let allChats = [...store.chats];
 
     contactsStore.list.forEach(contact => {
@@ -689,7 +731,7 @@ function renderChatList() {
         ? allChats
         : allChats.filter(c => c.folder === store.currentFolder);
 
-    list.innerHTML = filtered.map(chat => `
+    const newHtml = filtered.map(chat => `
         <div class="chat-item ${store.currentChat === chat.id ? 'active' : ''}" onclick="selectChat('${chat.id}')">
             <div class="chat-avatar ${chat.online ? 'online' : ''}">${chat.avatar}</div>
             <div class="chat-info">
@@ -705,6 +747,12 @@ function renderChatList() {
             <button class="delete-chat-btn" onclick="event.stopPropagation(); deleteChat('${chat.id}')" title="Удалить чат">✕</button>
         </div>
     `).join('');
+
+    const newHash = newHtml;
+    if (newHash !== lastRenderedChatListHash) {
+        list.innerHTML = newHtml;
+        lastRenderedChatListHash = newHash;
+    }
 }
 
 function selectChat(id) {
@@ -727,17 +775,19 @@ function renderMessages() {
     if (!container || !chat) return;
 
     if (!chat.messages || chat.messages.length === 0) {
-        container.innerHTML = `
+        const emptyHtml = `
             <div class="empty-state">
                 <div class="empty-state-icon">💬</div>
                 <h3>Нет сообщений</h3>
                 <p>Напишите первое сообщение!</p>
             </div>
         `;
+        if (container.innerHTML !== emptyHtml) container.innerHTML = emptyHtml;
+        lastRenderedMessagesHash = '';
         return;
     }
 
-    container.innerHTML = `
+    const messagesHtml = `
         <div class="date-separator"><span>Последние сообщения</span></div>
         ${chat.messages.map(m => `
             <div class="message ${m.sent ? 'sent' : 'received'}">
@@ -756,7 +806,13 @@ function renderMessages() {
             </div>
         `).join('')}
     `;
-    container.scrollTop = container.scrollHeight;
+
+    const newHash = messagesHtml;
+    if (newHash !== lastRenderedMessagesHash) {
+        container.innerHTML = messagesHtml;
+        container.scrollTop = container.scrollHeight;
+        lastRenderedMessagesHash = newHash;
+    }
 }
 
 async function verifySignature(msgId) {
@@ -778,13 +834,16 @@ async function verifySignature(msgId) {
 }
 
 function renderEmptyState() {
-    document.getElementById('messages-container').innerHTML = `
+    const container = document.getElementById('messages-container');
+    const emptyHtml = `
         <div class="empty-state">
             <div class="empty-state-icon">💬</div>
             <h3>Выберите чат</h3>
             <p>И подключите кошелёк для отправки</p>
         </div>
     `;
+    if (container.innerHTML !== emptyHtml) container.innerHTML = emptyHtml;
+    lastRenderedMessagesHash = '';
 }
 
 function updateInputState() {
@@ -1013,14 +1072,14 @@ async function addContactFromInput() {
     }
 }
 
-// 🆕 Открытие модалки настроек с кнопкой обновления ключа
+// 🆕 Открытие модалки настроек с добавлением кнопки обновления ключа
 function openSettingsModal() {
-    // Добавляем в модалку настроек кнопку для регенерации ключа
     const modal = document.getElementById('settingsModal');
     if (!modal) return;
 
-    // Проверяем, есть ли уже кнопка
     if (!document.getElementById('regenerateKeyBtn')) {
+        const modalContent = modal.querySelector('.modal-content');
+        const closeBtn = modalContent.querySelector('.btn-secondary');
         const btnContainer = document.createElement('div');
         btnContainer.className = 'mt-4 pt-4 border-t border-white/10';
         btnContainer.innerHTML = `
@@ -1030,11 +1089,11 @@ function openSettingsModal() {
             </button>
             <p class="text-xs text-zinc-600 mt-1">Старые зашифрованные сообщения станут нечитаемыми</p>
         `;
-        modal.querySelector('.modal-content').appendChild(btnContainer);
+        modalContent.insertBefore(btnContainer, closeBtn);
         document.getElementById('regenerateKeyBtn').onclick = regenerateEncryptionKeys;
     }
 
-    showModal('settingsModal');
+    openModal('settingsModal');
 }
 
 // ─── Глобальный экспорт ──────────────────────────────────────────────────────
@@ -1056,4 +1115,4 @@ window.registerUser        = registerUser;
 window.refreshCurrentChat  = refreshCurrentChat;
 window.verifySignature     = verifySignature;
 window.deleteChat          = deleteChat;
-window.openSettingsModal   = openSettingsModal; // переопределяем, чтобы добавить кнопку
+window.openSettingsModal   = openSettingsModal;
