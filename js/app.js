@@ -1,8 +1,9 @@
-// Web3 Messenger - App Logic v6.1
+// Web3 Messenger - App Logic v7.0
 // ✅ Real on-chain messaging with wallet signatures
+// ✅ Hybrid encryption (AES-GCM + RSA-OAEP) via KeyRegistry
 // ✅ Auto BASE_URL from current domain
 
-console.log('🚀 Web3 Messenger v6.1 loaded');
+console.log('🚀 Web3 Messenger v7.0 loaded');
 
 if (typeof ethers === 'undefined') {
     console.error('❌ ethers.js не загружен! Проверьте CDN в index.html');
@@ -14,14 +15,21 @@ let isAdmin = false;
 let currentUsername = '';
 const ADMIN_ADDRESS    = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
 const IDENTITY_CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
-const MESSAGE_CONTRACT_ADDRESS = "0x906DCA5190841d5F0acF8244bd8c176ecb24139D"; // ← Задеплоенный MessageStorage
-const BASE_URL         = window.location.origin + '/'; // 🔥 АВТОМАТИЧЕСКИ ОПРЕДЕЛЯЕТСЯ
+const MESSAGE_CONTRACT_ADDRESS = "0x906DCA5190841d5F0acF8244bd8c176ecb24139D";
+const KEY_REGISTRY_ADDRESS = "0x075Da61CCaaC73279CCc49097B8e5fDcF6dd8737";
+const BASE_URL = window.location.origin + '/';
 
-// ABI MessageStorage (минимальный)
+// ABI MessageStorage
 const MESSAGE_ABI = [
     "function sendMessage(address recipient, string text, bytes signature) external",
     "function getMessages(address sender, address recipient, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[])",
     "function getConversation(address userA, address userB, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[] sent, tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[] received)"
+];
+
+// ABI KeyRegistry
+const KEY_REGISTRY_ABI = [
+    "function setPublicKey(bytes calldata publicKey) external",
+    "function getPublicKey(address user) external view returns (bytes memory)"
 ];
 
 // ─── Хранилище контактов ────────────────────────────────────────────────────
@@ -56,14 +64,15 @@ const store = {
     currentChat: null,
     currentFolder: 'all',
     chats: [
-        // Демо чаты остаются для примера, но реальные будут добавляться из контактов
         { id: 'dima', name: 'Дима', avatar: '👤', online: true, folder: 'personal', unread: 0, messages: [] },
         { id: 'ai', name: 'AI Assistant', avatar: '🤖', online: true, folder: 'work', unread: 0, messages: [] },
         { id: 'crypto', name: 'Crypto News', avatar: '📢', online: false, folder: 'news', unread: 0, messages: [] },
     ],
-    // Кэш сообщений из контракта
     messageCache: {}
 };
+
+// 🔐 RSA-ключи пользователя (хранятся в localStorage)
+let userRSAKeyPair = null;
 
 // ─── Инициализация ───────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
@@ -97,7 +106,7 @@ async function handleContactParam() {
     }
 }
 
-// ─── Получение профиля из контракта ─────────────────────────────────────────
+// ─── Получение профиля из контракта Identity ─────────────────────────────────
 async function getProfileByAddress(address) {
     if (!provider) return null;
     try {
@@ -134,6 +143,7 @@ async function initWallet() {
         updateInputState();
         updateShareButton();
         await checkRegistration();
+        await loadOrGenerateRSAKeys();
     } catch (e) {
         console.error('Init error:', e);
         showError('wallet-msg', 'Ошибка: ' + e.message);
@@ -252,141 +262,85 @@ async function registerUser() {
     }
 }
 
-// ─── Admin UI ────────────────────────────────────────────────────────────────
-function updateAdminButton() {
-    const adminBtn = document.getElementById('admin-btn');
-    if (adminBtn) adminBtn.style.display = isAdmin ? 'flex' : 'none';
-}
-
-function openAdminModal() {
-    if (!isAdmin) {
-        alert('🔒 Доступ разрешён только владельцу платформы.');
-        return;
-    }
-    document.getElementById('admin-modal').style.display = 'flex';
-    document.getElementById('escrow-status').style.display = 'none';
-    document.getElementById('escrow-user-address').value = '';
-}
-
-async function accessEscrowKey() {
-    const userAddr = document.getElementById('escrow-user-address').value.trim();
-    const statusEl = document.getElementById('escrow-status');
-
-    if (!userAddr || !ethers.utils.isAddress(userAddr)) {
-        statusEl.textContent = '⚠️ Введите корректный адрес Ethereum';
-        statusEl.style.color = 'var(--warning)';
-        statusEl.style.display = 'block';
+// ─── 🔐 RSA-ключи и KeyRegistry ───────────────────────────────────────────────
+async function loadOrGenerateRSAKeys() {
+    if (!userAddress) return;
+    const stored = localStorage.getItem('rsa_private_key');
+    if (stored) {
+        userRSAKeyPair = { privateKey: JSON.parse(stored) };
+        console.log('🔑 RSA ключи загружены из localStorage');
         return;
     }
 
-    statusEl.textContent = '🔍 Запрос к смарт-контракту...';
-    statusEl.style.color = 'var(--text-muted)';
-    statusEl.style.display = 'block';
-
+    showToast('🔐 Генерация ключей шифрования...', 'info');
     try {
-        // В реальности вызов getEscrowedKey()
-        await new Promise(r => setTimeout(r, 1200));
-        const mockKey = "0x" + Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('');
+        const keyPair = await crypto.subtle.generateKey(
+            { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1,0,1]), hash: "SHA-256" },
+            true, ["encrypt", "decrypt"]
+        );
+        const privateKeyJwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey);
+        localStorage.setItem('rsa_private_key', JSON.stringify(privateKeyJwk));
+        userRSAKeyPair = { privateKey: privateKeyJwk };
 
-        statusEl.innerHTML = `✅ Ключ получен!<br><code style="background:var(--bg-tertiary); padding:6px 10px; border-radius:6px; word-break:break-all; font-size:11px;">${mockKey}</code>`;
-        statusEl.style.color = 'var(--success)';
-        console.log('🔓 Escrow Key Retrieved:', mockKey);
-    } catch (err) {
-        statusEl.textContent = '❌ Ошибка: ' + (err.reason || err.message);
-        statusEl.style.color = 'var(--danger)';
-    }
-}
+        const publicKeyBytes = await crypto.subtle.exportKey("spki", keyPair.publicKey);
+        const publicKeyHex = "0x" + Array.from(new Uint8Array(publicKeyBytes)).map(b => b.toString(16).padStart(2,'0')).join('');
 
-// ─── Share Profile ────────────────────────────────────────────────────────────
-function updateShareButton() {
-    const btn = document.getElementById('share-profile-btn');
-    if (btn) btn.style.display = userAddress ? 'flex' : 'none';
-}
-
-async function openShareModal() {
-    if (!userAddress) { alert('🔗 Сначала подключите кошелёк'); return; }
-
-    const modal       = document.getElementById('share-modal');
-    const qrContainer = document.getElementById('qr-container');
-    const linkInput   = document.getElementById('share-link-input');
-
-    const shareUrl = `${BASE_URL}?contact=${userAddress}`;
-    linkInput.value = shareUrl;
-
-    qrContainer.innerHTML = '';
-    new QRCode(qrContainer, { text: shareUrl, width: 180, height: 180, correctLevel: QRCode.CorrectLevel.M });
-
-    modal.style.display = 'flex';
-}
-
-async function copyShareLink() {
-    const input = document.getElementById('share-link-input');
-    try {
-        await navigator.clipboard.writeText(input.value);
-        showStatus('✅ Ссылка скопирована!', 'success');
+        const keyRegistry = new ethers.Contract(KEY_REGISTRY_ADDRESS, KEY_REGISTRY_ABI, signer);
+        const tx = await keyRegistry.setPublicKey(publicKeyHex);
+        await tx.wait();
+        showToast('✅ Ключи шифрования сохранены в блокчейне!', 'success');
     } catch (e) {
-        input.select();
-        document.execCommand('copy');
-        showStatus('✅ Ссылка скопирована!', 'success');
+        console.error('RSA key generation failed:', e);
+        showToast('❌ Ошибка генерации ключей', 'error');
     }
 }
 
-function shareToTelegram() {
-    const url  = document.getElementById('share-link-input').value;
-    const text = `Привет! Добавь меня в Web3 Messenger — децентрализованный мессенджер на Polygon: ${url}`;
-    window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, '_blank');
-}
-
-function shareToWhatsApp() {
-    const url  = document.getElementById('share-link-input').value;
-    const text = `Привет! Добавь меня в Web3 Messenger — децентрализованный мессенджер на Polygon: ${url}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-}
-
-function shareToTwitter() {
-    const url  = document.getElementById('share-link-input').value;
-    const text = `Присоединяйся ко мне в Web3 Messenger — децентрализованный чат на Polygon! ${url} #Web3 #Polygon #Messenger`;
-    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank');
-}
-
-// ─── Добавление контакта ─────────────────────────────────────────────────────
-async function addContactFromInput() {
-    const input = document.getElementById('add-contact-input');
-    const query = input.value.trim();
-    if (!query) return;
-
-    try {
-        showStatus('🔍 Поиск...', 'info');
-
-        let address = query;
-        if (!ethers.utils.isAddress(query)) {
-            throw new Error('Введите корректный адрес');
-        }
-
-        const profile = await getProfileByAddress(address);
-        if (profile && profile.isActive) {
-            if (contactsStore.add({ address, ...profile })) {
-                renderChatList();
-                showStatus('✅ Контакт добавлен!', 'success');
-                input.value = '';
-            } else {
-                showStatus('ℹ️ Контакт уже в списке', 'info');
-            }
-        } else {
-            if (contactsStore.add({ address })) {
-                renderChatList();
-                showStatus('✅ Контакт добавлен', 'success');
-                input.value = '';
-            } else {
-                showStatus('ℹ️ Контакт уже в списке', 'info');
-            }
-        }
-    } catch (e) {
-        showStatus('❌ ' + e.message, 'error');
+// 🔐 Гибридное шифрование (AES + RSA)
+async function hybridEncrypt(plaintext, recipientAddress) {
+    const keyRegistry = new ethers.Contract(KEY_REGISTRY_ADDRESS, KEY_REGISTRY_ABI, provider);
+    const publicKeyHex = await keyRegistry.getPublicKey(recipientAddress);
+    if (!publicKeyHex || publicKeyHex === '0x') {
+        throw new Error('У получателя нет публичного ключа');
     }
+
+    const publicKeyBytes = new Uint8Array(publicKeyHex.slice(2).match(/.{1,2}/g).map(b => parseInt(b,16)));
+    const publicKey = await crypto.subtle.importKey("spki", publicKeyBytes, { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]);
+
+    const aesKey = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+
+    const encoded = new TextEncoder().encode(plaintext);
+    const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, aesKey, encoded);
+
+    const rawAesKey = await crypto.subtle.exportKey("raw", aesKey);
+    const encryptedAesKey = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, publicKey, rawAesKey);
+
+    return {
+        ciphertext: "0x" + Array.from(new Uint8Array(ciphertext)).map(b => b.toString(16).padStart(2,'0')).join(''),
+        encryptedKey: "0x" + Array.from(new Uint8Array(encryptedAesKey)).map(b => b.toString(16).padStart(2,'0')).join(''),
+        iv: "0x" + Array.from(iv).map(b => b.toString(16).padStart(2,'0')).join('')
+    };
 }
 
-// ─── Подпись и отправка сообщений (ON-CHAIN) ─────────────────────────────────
+async function hybridDecrypt(encryptedData) {
+    if (!userRSAKeyPair || !userRSAKeyPair.privateKey) {
+        throw new Error('Приватный ключ не найден');
+    }
+
+    const privateKey = await crypto.subtle.importKey("jwk", userRSAKeyPair.privateKey, { name: "RSA-OAEP", hash: "SHA-256" }, false, ["decrypt"]);
+
+    const encryptedKeyBytes = new Uint8Array(encryptedData.encryptedKey.slice(2).match(/.{1,2}/g).map(b => parseInt(b,16)));
+    const ivBytes = new Uint8Array(encryptedData.iv.slice(2).match(/.{1,2}/g).map(b => parseInt(b,16)));
+    const ciphertextBytes = new Uint8Array(encryptedData.ciphertext.slice(2).match(/.{1,2}/g).map(b => parseInt(b,16)));
+
+    const rawAesKey = await crypto.subtle.decrypt({ name: "RSA-OAEP" }, privateKey, encryptedKeyBytes);
+    const aesKey = await crypto.subtle.importKey("raw", rawAesKey, { name: "AES-GCM" }, false, ["decrypt"]);
+
+    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: ivBytes }, aesKey, ciphertextBytes);
+    return new TextDecoder().decode(decrypted);
+}
+
+// ─── Подпись и отправка сообщений (с шифрованием) ─────────────────────────────
 async function signMessage(text) {
     if (!signer) throw new Error('Кошелёк не подключён');
     return await signer.signMessage(text);
@@ -394,8 +348,8 @@ async function signMessage(text) {
 
 async function sendMessage() {
     const input = document.getElementById('msg-input');
-    const text  = input.value.trim();
-    if (!text || !store.currentChat) return;
+    const plaintext = input.value.trim();
+    if (!plaintext || !store.currentChat) return;
     if (!signer) { openModal('wallet-modal'); return; }
 
     const chat = getChatById(store.currentChat);
@@ -411,16 +365,21 @@ async function sendMessage() {
     btn.disabled = true;
     input.disabled = true;
     const originalPlaceholder = input.placeholder;
-    input.placeholder = '⏳ Подписание и отправка...';
+    input.placeholder = '🔐 Шифрование и подпись...';
 
     try {
-        const signature = await signMessage(text);
+        showToast('🔐 Шифруем сообщение...', 'info');
+        const encrypted = await hybridEncrypt(plaintext, recipient);
+        const encryptedJSON = JSON.stringify(encrypted);
+
+        const signature = await signMessage(encryptedJSON);
+
         const msgContract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
-        const tx = await msgContract.sendMessage(recipient, text, signature);
-        
-        showToast('📤 Транзакция отправлена. Ожидайте подтверждения...', 'info');
+        const tx = await msgContract.sendMessage(recipient, encryptedJSON, signature);
+
+        showToast('📤 Транзакция отправлена. Ожидайте...', 'info');
         await tx.wait();
-        
+
         input.value = '';
         showToast('✅ Сообщение сохранено в блокчейне!', 'success');
         await loadMessagesForChat(recipient);
@@ -435,30 +394,41 @@ async function sendMessage() {
     }
 }
 
-// ─── Загрузка сообщений из контракта ─────────────────────────────────────────
+// ─── Загрузка сообщений (с расшифровкой) ──────────────────────────────────────
 async function loadMessagesForChat(chatId) {
     if (!signer || !userAddress) return;
-    
+
     const counterparty = ethers.utils.isAddress(chatId) ? chatId : null;
     if (!counterparty) return;
 
     try {
         const msgContract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
         const [sent, received] = await msgContract.getConversation(userAddress, counterparty, 0, 50);
-        
+
         const allMessages = [...sent, ...received].sort((a, b) => a.timestamp - b.timestamp);
-        
-        const formatted = allMessages.map(m => ({
-            id: m.timestamp.toString() + m.sender,
-            text: m.text,
-            sent: m.sender.toLowerCase() === userAddress.toLowerCase(),
-            time: new Date(m.timestamp * 1000).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-            status: 'delivered',
-            signature: m.signature,
-            sender: m.sender,
-            timestamp: m.timestamp
-        }));
-        
+
+        const formatted = [];
+        for (const m of allMessages) {
+            let displayText = m.text;
+            try {
+                const encrypted = JSON.parse(m.text);
+                displayText = await hybridDecrypt(encrypted);
+            } catch (e) {
+                displayText = '[Зашифрованное сообщение]';
+            }
+
+            formatted.push({
+                id: m.timestamp.toString() + m.sender,
+                text: displayText,
+                sent: m.sender.toLowerCase() === userAddress.toLowerCase(),
+                time: new Date(m.timestamp * 1000).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+                status: 'delivered',
+                signature: m.signature,
+                sender: m.sender,
+                timestamp: m.timestamp
+            });
+        }
+
         let chat = getChatById(chatId);
         if (!chat) {
             const profile = await getProfileByAddress(counterparty);
@@ -480,7 +450,7 @@ async function loadMessagesForChat(chatId) {
             chat.preview = last.text;
             chat.time = last.time;
         }
-        
+
         if (store.currentChat === chatId) {
             renderMessages();
         }
@@ -618,7 +588,7 @@ async function verifySignature(msgId) {
     if (!chat) return;
     const msg = chat.messages.find(m => m.id === msgId);
     if (!msg || !msg.signature) return;
-    
+
     try {
         const recovered = ethers.utils.verifyMessage(msg.text, msg.signature);
         if (recovered.toLowerCase() === msg.sender.toLowerCase()) {
@@ -727,6 +697,110 @@ function escapeHtml(t) {
     const d = document.createElement('div');
     d.textContent = t;
     return d.innerHTML;
+}
+
+// ─── Админские функции (без изменений) ────────────────────────────────────────
+function updateAdminButton() {
+    const adminBtn = document.getElementById('admin-btn');
+    if (adminBtn) adminBtn.style.display = isAdmin ? 'flex' : 'none';
+}
+
+function openAdminModal() {
+    if (!isAdmin) { alert('🔒 Доступ разрешён только владельцу.'); return; }
+    document.getElementById('admin-modal').style.display = 'flex';
+    document.getElementById('escrow-status').style.display = 'none';
+    document.getElementById('escrow-user-address').value = '';
+}
+
+async function accessEscrowKey() {
+    const userAddr = document.getElementById('escrow-user-address').value.trim();
+    const statusEl = document.getElementById('escrow-status');
+    if (!userAddr || !ethers.utils.isAddress(userAddr)) {
+        statusEl.textContent = '⚠️ Введите корректный адрес';
+        statusEl.style.color = 'var(--warning)';
+        statusEl.style.display = 'block';
+        return;
+    }
+    statusEl.textContent = '🔍 Запрос к смарт-контракту...';
+    statusEl.style.color = 'var(--text-muted)';
+    statusEl.style.display = 'block';
+    try {
+        await new Promise(r => setTimeout(r, 1200));
+        const mockKey = "0x" + Array(64).fill(0).map(() => Math.floor(Math.random()*16).toString(16)).join('');
+        statusEl.innerHTML = `✅ Ключ получен!<br><code style="background:var(--bg-tertiary); padding:6px 10px; border-radius:6px;">${mockKey}</code>`;
+        statusEl.style.color = 'var(--success)';
+    } catch (err) {
+        statusEl.textContent = '❌ Ошибка: ' + (err.reason || err.message);
+        statusEl.style.color = 'var(--danger)';
+    }
+}
+
+function updateShareButton() {
+    const btn = document.getElementById('share-profile-btn');
+    if (btn) btn.style.display = userAddress ? 'flex' : 'none';
+}
+
+async function openShareModal() {
+    if (!userAddress) { alert('🔗 Сначала подключите кошелёк'); return; }
+    const modal = document.getElementById('share-modal');
+    const qrContainer = document.getElementById('qr-container');
+    const linkInput = document.getElementById('share-link-input');
+    const shareUrl = `${BASE_URL}?contact=${userAddress}`;
+    linkInput.value = shareUrl;
+    qrContainer.innerHTML = '';
+    new QRCode(qrContainer, { text: shareUrl, width: 180, height: 180, correctLevel: QRCode.CorrectLevel.M });
+    modal.style.display = 'flex';
+}
+
+async function copyShareLink() {
+    const input = document.getElementById('share-link-input');
+    try {
+        await navigator.clipboard.writeText(input.value);
+        showStatus('✅ Ссылка скопирована!', 'success');
+    } catch (e) {
+        input.select(); document.execCommand('copy');
+        showStatus('✅ Ссылка скопирована!', 'success');
+    }
+}
+
+function shareToTelegram() {
+    const url = document.getElementById('share-link-input').value;
+    const text = `Привет! Добавь меня в Web3 Messenger — децентрализованный мессенджер на Polygon: ${url}`;
+    window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, '_blank');
+}
+
+function shareToWhatsApp() {
+    const url = document.getElementById('share-link-input').value;
+    const text = `Привет! Добавь меня в Web3 Messenger — децентрализованный мессенджер на Polygon: ${url}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+}
+
+function shareToTwitter() {
+    const url = document.getElementById('share-link-input').value;
+    const text = `Присоединяйся ко мне в Web3 Messenger — децентрализованный чат на Polygon! ${url} #Web3 #Polygon #Messenger`;
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank');
+}
+
+async function addContactFromInput() {
+    const input = document.getElementById('add-contact-input');
+    const query = input.value.trim();
+    if (!query) return;
+    try {
+        showStatus('🔍 Поиск...', 'info');
+        let address = query;
+        if (!ethers.utils.isAddress(query)) throw new Error('Введите корректный адрес');
+        const profile = await getProfileByAddress(address);
+        if (profile && profile.isActive) {
+            contactsStore.add({ address, ...profile });
+        } else {
+            contactsStore.add({ address });
+        }
+        renderChatList();
+        showStatus('✅ Контакт добавлен!', 'success');
+        input.value = '';
+    } catch (e) {
+        showStatus('❌ ' + e.message, 'error');
+    }
 }
 
 // ─── Глобальный экспорт ──────────────────────────────────────────────────────
