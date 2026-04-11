@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
+pragma experimental ABIEncoderV2;
 
 contract MessageStorage {
     struct Message {
@@ -10,7 +11,7 @@ contract MessageStorage {
         uint256 timestamp;
     }
 
-    mapping(address => mapping(address => Message[])) private messages; // sender -> recipient -> messages
+    mapping(address => mapping(address => Message[])) private messages;
     mapping(address => mapping(address => uint256)) public messageCount;
 
     event MessageSent(
@@ -27,9 +28,6 @@ contract MessageStorage {
         require(bytes(text).length > 0, "Empty message");
         require(signature.length == 65, "Invalid signature length");
 
-        // Verify signature (off-chain verification recommended, but we can also store it)
-        // We store the signature so recipient can verify off-chain.
-
         uint256 msgId = messageCount[msg.sender][recipient];
         messages[msg.sender][recipient].push(Message({
             sender: msg.sender,
@@ -43,8 +41,9 @@ contract MessageStorage {
         emit MessageSent(msg.sender, recipient, msgId, text, signature, block.timestamp);
     }
 
+    // 🔹 Эта функция ДОЛЖНА быть объявлена ДО getConversation
     function getMessages(address sender, address recipient, uint256 startIndex, uint256 count)
-        external
+        public
         view
         returns (Message[] memory)
     {
@@ -62,6 +61,7 @@ contract MessageStorage {
         return result;
     }
 
+    // 🔹 Теперь вызов getMessages корректен
     function getConversation(address userA, address userB, uint256 startIndex, uint256 count)
         external
         view
