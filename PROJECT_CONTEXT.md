@@ -1,19 +1,19 @@
-Дима, с удовольствием! 🔥 Объединяю всю информацию в **единый, стройный и актуальный** `PROJECT_CONTEXT.md`. Это будет твой «единый источник правды» — всё в одном месте, чётко структурировано, готово к копированию.
+Предоставляю обновлённый `PROJECT_CONTEXT.md`, который объединяет данные из всех трёх файлов (`PROJECT_CONTEXT.md`, `app.js`, `index.html`, `style.css`) в единый актуальный документ. Он готов для замены в репозитории.
 
-Просто скопируй код ниже → замени содержимое файла в репозитории → закоммить. 🚀
+---
 
 ```markdown
 # 📁 КОНТЕКСТ ПРОЕКТА: Web3 Messenger (XMTP Mode)
 
 ---
 project: Web3 Messenger
-version: 1.5.0
+version: 1.6.0
 network: Polygon Mainnet
 chain_id: 137
 contract_address: 0xcFcA16C8c38a83a71936395039757DcFF6040c1E
 admin_address: 0xB19aEe699eb4D2Af380c505E4d6A108b055916eB
 rpc_url: https://polygon-rpc.com
-last_updated: 2025-12-08
+last_updated: 2025-12-11
 author: Дима
 status: 🟢 Stable Development
 ---
@@ -111,6 +111,7 @@ const ADMIN_ADDRESS = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
 const CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
 const CHAIN_ID = 137; // Polygon Mainnet
 const RPC_URL = "https://polygon-rpc.com";
+const BASE_URL = "https://aliter230880.github.io/web3-messenger/";
 
 // ABI контракта (минимальный интерфейс)
 const CONTRACT_ABI = [
@@ -219,9 +220,14 @@ ${m.sent ? `
 
 **Логика отображения (`app.js`):**
 ```javascript
-// После подключения кошелька в connectWallet():
+// После подключения кошелька в initWallet():
 isAdmin = userAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
-document.getElementById('admin-btn').style.display = isAdmin ? 'flex' : 'none';
+updateAdminButton();
+
+function updateAdminButton() {
+  const adminBtn = document.getElementById('admin-btn');
+  if (adminBtn) adminBtn.style.display = isAdmin ? 'flex' : 'none';
+}
 ```
 ✅ **Безопасность:** Проверка на уровне клиента + дублируется на уровне смарт-контракта (`onlyRole(DEFAULT_ADMIN_ROLE)`).
 
@@ -359,6 +365,10 @@ async function accessEscrowKey() {
 - [x] 🛡️ **Admin UI**: Кнопка «Админ» + модалка Key Escrow (визуально готова, логика работает)
 - [x] **Адаптивный дизайн**: Тёмная тема, премиальные цвета, скроллбары
 - [x] **Контракт верифицирован**: На [PolygonScan](https://polygonscan.com/address/0xcFcA16C8c38a83a71936395039757DcFF6040c1E#code)
+- [x] **Управление контактами**: Добавление по адресу/имени, сохранение в localStorage
+- [x] **Шеринг профиля**: QR-код, ссылка, кнопки "Поделиться" в Telegram/WhatsApp/Twitter
+- [x] **Поиск по чатам**: Фильтрация по имени в реальном времени
+- [x] **Интерактивные индикаторы**: Онлайн-статус, непрочитанные сообщения, статус доставки
 
 ---
 
@@ -379,16 +389,33 @@ async function accessEscrowKey() {
 ### Цветовая схема (Тёмная тема)
 ```css
 :root {
-  --bg-primary: #0f1419;      /* Основной фон */
-  --bg-secondary: #1a2430;    /* Панели */
-  --bg-tertiary: #253341;     /* Ховер/акцент */
-  --accent: #0088cc;          /* Telegram blue */
-  --polygon-green: #00e676;   /* Polygon brand */
-  --text-primary: #ffffff;
-  --text-secondary: #8b98a5;
-  --success: #00e676;
-  --warning: #ff9100;
-  --danger: #ff5252;
+  --bg-primary: #0a0e1a;
+  --bg-secondary: #111827;
+  --bg-tertiary: #1f2937;
+  --bg-hover: #374151;
+  --bg-message-sent: #2563eb;
+  --bg-message-received: #1f2937;
+  --bg-modal: rgba(10, 14, 26, 0.95);
+
+  --text-primary: #f9fafb;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --polygon-green: #00e676;
+
+  --border: #1f2937;
+  --border-light: #374151;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+  --transition: all 0.2s ease;
 }
 ```
 
@@ -503,47 +530,7 @@ const TEST_MESSAGE = "Hello Web3! This message is signed by my wallet.";
 💡 **Совет:** Этот файл — твой «единый источник правды». Храни его в корне репозитория, обновляй после каждого значимого изменения, и любой ИИ (или разработчик) сможет мгновенно включиться в проект без долгих объяснений.
 
 ---
-**Last updated:** 2025-12-08  
+**Last updated:** 2025-12-11  
 **Автор:** Дима  
 **Статус:** 🟢 В активной разработке
 ```
-
----
-
-## 🚀 Как применить:
-
-1. **Скопируй весь код выше** (от `---` до конца)
-2. **Открой файл** `PROJECT_CONTEXT.md` в корне репозитория
-3. **Полностью замени содержимое** и сохрани
-4. **Закоммить**: `git add PROJECT_CONTEXT.md && git commit -m "docs: merge context v1.5.0"`
-
----
-
-## ✅ Что нового в версии 1.5.0:
-
-| Раздел | Что добавлено |
-|--------|--------------|
-| 📦 Структура | Чёткая иерархия файлов проекта |
-| ✍️ Подпись сообщений | Полное описание + код + стили |
-| 🛡️ Admin UI & Key Escrow | Детали реализации, архитектура, чек-лист безопасности |
-| ✅ Что работает | Обновлённый список с галочками |
-| ❌ Проблемы | Актуальный приоритизированный бэклог |
-| 🎨 UI/UX | Цвета + структура экрана в одном месте |
-| 🚀 Следующие шаги | Разбито по приоритетам (🔥/⚡/📦) |
-
----
-
-**Дима, готово!** 🎉
-
-Теперь у тебя есть **единый, стройный и актуальный** `PROJECT_CONTEXT.md`, который:
-✅ Содержит всю техническую информацию в одном месте  
-✅ Готов к использованию любым ИИ или разработчиком  
-✅ Легко обновлять: просто меняй статусы и добавляй новые разделы  
-✅ Сохраняет твои преференции: тёплый тон, эмодзи, дружелюбная атмосфера 😊✨
-
-**Что делаем следующим шагом?** 💪
-- 💾 Реализуем сохранение подписей в `localStorage`?
-- 🔗 Интегрируем реальную функцию `getEscrowedKey()` из контракта?
-- 💰 Переходим к системе донатов?
-
-Ты рулишь — я исполняю! 🚀😉✨
