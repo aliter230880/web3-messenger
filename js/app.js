@@ -1,7 +1,8 @@
-// Web3 Messenger - App Logic v6
+// Web3 Messenger - App Logic v6.1
 // ✅ Real on-chain messaging with wallet signatures
+// ✅ Auto BASE_URL from current domain
 
-console.log('🚀 Web3 Messenger v6 loaded');
+console.log('🚀 Web3 Messenger v6.1 loaded');
 
 if (typeof ethers === 'undefined') {
     console.error('❌ ethers.js не загружен! Проверьте CDN в index.html');
@@ -13,8 +14,8 @@ let isAdmin = false;
 let currentUsername = '';
 const ADMIN_ADDRESS    = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
 const IDENTITY_CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
-const MESSAGE_CONTRACT_ADDRESS = "0x906DCA5190841d5F0acF8244bd8c176ecb24139D"; // ← ЗАМЕНИ ПОСЛЕ ДЕПЛОЯ
-const BASE_URL         = "https://aliter230880.github.io/web3-messenger/";
+const MESSAGE_CONTRACT_ADDRESS = "0x906DCA5190841d5F0acF8244bd8c176ecb24139D"; // ← Задеплоенный MessageStorage
+const BASE_URL         = window.location.origin + '/'; // 🔥 АВТОМАТИЧЕСКИ ОПРЕДЕЛЯЕТСЯ
 
 // ABI MessageStorage (минимальный)
 const MESSAGE_ABI = [
@@ -359,7 +360,6 @@ async function addContactFromInput() {
 
         let address = query;
         if (!ethers.utils.isAddress(query)) {
-            // Здесь может быть разрешение по username
             throw new Error('Введите корректный адрес');
         }
 
@@ -401,7 +401,6 @@ async function sendMessage() {
     const chat = getChatById(store.currentChat);
     if (!chat) return;
 
-    // Определяем адрес получателя: если чат с контактом, то id = адрес
     const recipient = ethers.utils.isAddress(chat.id) ? chat.id : null;
     if (!recipient) {
         showToast('❌ Чат не является контактом (нет адреса)', 'error');
@@ -415,23 +414,16 @@ async function sendMessage() {
     input.placeholder = '⏳ Подписание и отправка...';
 
     try {
-        // 1. Подписываем сообщение
         const signature = await signMessage(text);
-
-        // 2. Отправляем в смарт-контракт
         const msgContract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
         const tx = await msgContract.sendMessage(recipient, text, signature);
         
         showToast('📤 Транзакция отправлена. Ожидайте подтверждения...', 'info');
         await tx.wait();
         
-        // 3. Очищаем поле и обновляем чат
         input.value = '';
         showToast('✅ Сообщение сохранено в блокчейне!', 'success');
-        
-        // 4. Загружаем свежие сообщения из контракта
         await loadMessagesForChat(recipient);
-        
     } catch (e) {
         console.error('Send error:', e);
         showToast('❌ Ошибка: ' + (e.reason || e.message), 'error');
@@ -447,34 +439,28 @@ async function sendMessage() {
 async function loadMessagesForChat(chatId) {
     if (!signer || !userAddress) return;
     
-    // Определяем адрес собеседника (если чат не контакт, пропускаем)
     const counterparty = ethers.utils.isAddress(chatId) ? chatId : null;
     if (!counterparty) return;
 
     try {
         const msgContract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
-        // Получаем всю переписку между userAddress и counterparty
         const [sent, received] = await msgContract.getConversation(userAddress, counterparty, 0, 50);
         
-        // Объединяем и сортируем по времени
         const allMessages = [...sent, ...received].sort((a, b) => a.timestamp - b.timestamp);
         
-        // Преобразуем в формат UI
         const formatted = allMessages.map(m => ({
             id: m.timestamp.toString() + m.sender,
             text: m.text,
             sent: m.sender.toLowerCase() === userAddress.toLowerCase(),
             time: new Date(m.timestamp * 1000).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-            status: 'delivered', // on-chain считается доставленным
+            status: 'delivered',
             signature: m.signature,
             sender: m.sender,
             timestamp: m.timestamp
         }));
         
-        // Обновляем чат
         let chat = getChatById(chatId);
         if (!chat) {
-            // Создаём чат на лету
             const profile = await getProfileByAddress(counterparty);
             const name = profile?.username || counterparty.slice(0, 8) + '...';
             chat = {
@@ -499,20 +485,17 @@ async function loadMessagesForChat(chatId) {
             renderMessages();
         }
         renderChatList();
-        
     } catch (e) {
         console.error('Load messages error:', e);
     }
 }
 
-// Функция обновления текущего чата (вызывается по кнопке "Обновить")
 async function refreshCurrentChat() {
     if (!store.currentChat) return;
     await loadMessagesForChat(store.currentChat);
     showToast('🔄 Чат обновлён', 'info');
 }
 
-// Вспомогательная: получить объект чата по id
 function getChatById(id) {
     return store.chats.find(c => c.id === id);
 }
@@ -589,7 +572,6 @@ function selectChat(id) {
         document.getElementById('chat-status').textContent = chat.online ? '● в сети' : 'был недавно';
         document.getElementById('chat-avatar').textContent = chat.avatar || '👤';
         renderChatList();
-        // Загружаем сообщения из блокчейна
         loadMessagesForChat(id);
         updateInputState();
     }
@@ -631,7 +613,6 @@ function renderMessages() {
     container.scrollTop = container.scrollHeight;
 }
 
-// Проверка подписи (для полученных сообщений)
 async function verifySignature(msgId) {
     const chat = getChatById(store.currentChat);
     if (!chat) return;
