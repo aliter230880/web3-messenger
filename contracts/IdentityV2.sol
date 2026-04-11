@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+// Импорты конкретных версий OpenZeppelin 4.9.3, которые совместимы с 0.8.20
+import "https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/releases/download/v4.9.3/contracts/proxy/utils/Initializable.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/releases/download/v4.9.3/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/releases/download/v4.9.3/contracts/access/OwnableUpgradeable.sol";
 
 contract IdentityV2 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     mapping(address => bool) private _registered;
@@ -24,7 +25,8 @@ contract IdentityV2 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function initialize() public initializer {
         __Ownable_init();
-        __UUPSUpgradeable_init(); // ✅ на 0.8.24 эта функция существует
+        // __UUPSUpgradeable_init() отсутствует в OpenZeppelin 4.9.3
+        // и не требуется для работы UUPS.
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
