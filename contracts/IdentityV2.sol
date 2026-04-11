@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-// Импорты конкретной версии OpenZeppelin 4.9.3 через GitHub (Remix их точно загрузит)
-import "https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/releases/download/v4.9.3/contracts/proxy/utils/Initializable.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/releases/download/v4.9.3/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/releases/download/v4.9.3/contracts/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 contract IdentityV2 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
-    // --- Существующие поля (порядок не менять!) ---
     mapping(address => bool) private _registered;
     mapping(address => Profile) private _profiles;
 
@@ -19,24 +17,18 @@ contract IdentityV2 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         bool isActive;
     }
 
-    // 🆕 НОВОЕ ПОЛЕ (добавляем в конец)
     mapping(address => bytes) private _publicKeys;
 
-    // --- События ---
     event ProfileRegistered(address indexed user, string username, uint256 timestamp);
     event PublicKeySet(address indexed user, bytes publicKey);
 
-    // --- Инициализатор ---
     function initialize() public initializer {
-        // В OpenZeppelin 4.9.3 __Ownable_init() не требует аргументов
         __Ownable_init();
-        // __UUPSUpgradeable_init() отсутствует в этой версии, не вызываем
+        __UUPSUpgradeable_init(); // ✅ на 0.8.24 эта функция существует
     }
 
-    // --- Обязательная функция для UUPS ---
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    // --- Существующие функции ---
     function registerProfile(string calldata username, string calldata avatarCID, string calldata bio) external {
         require(!_registered[msg.sender], "Already registered");
         require(bytes(username).length >= 3, "Username too short");
@@ -68,7 +60,6 @@ contract IdentityV2 is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return (p.username, p.avatarCID, p.bio, p.registeredAt, p.isActive);
     }
 
-    // --- 🆕 НОВЫЕ ФУНКЦИИ ДЛЯ ШИФРОВАНИЯ ---
     function setPublicKey(bytes calldata publicKey) external {
         require(publicKey.length > 0, "Empty key");
         _publicKeys[msg.sender] = publicKey;
