@@ -1,4 +1,4 @@
-// Web3 Messenger - App Logic v7.6
+// Web3 Messenger - App Logic v7.7
 // ✅ Auto-refresh current chat every 10s (no flicker)
 // ✅ Background discovery of new conversations (every 30s)
 // ✅ Persistent chat deletion
@@ -6,9 +6,10 @@
 // ✅ Automatic RSA key generation if missing in KeyRegistry
 // ✅ Manual key regeneration in settings
 // ✅ Sent messages displayed as plaintext for sender
+// ✅ Graceful decryption failure: show "[Зашифрованное сообщение]" instead of JSON
 // ✅ Smooth account change handling
 
-console.log('🚀 Web3 Messenger v7.6 loaded');
+console.log('🚀 Web3 Messenger v7.7 loaded');
 
 if (typeof ethers === 'undefined') {
     console.error('❌ ethers.js не загружен! Проверьте CDN в index.html');
@@ -396,22 +397,26 @@ async function hybridEncrypt(plaintext, recipientAddress) {
     };
 }
 
+// 🔓 Гибридная расшифровка – при ошибке возвращает null
 async function hybridDecrypt(encryptedData) {
-    if (!userRSAKeyPair || !userRSAKeyPair.privateKey) {
-        throw new Error('Приватный ключ не найден');
+    if (!userRSAKeyPair || !userRSAKeyPair.privateKey) return null;
+
+    try {
+        const privateKey = await crypto.subtle.importKey("jwk", userRSAKeyPair.privateKey, { name: "RSA-OAEP", hash: "SHA-256" }, false, ["decrypt"]);
+
+        const encryptedKeyBytes = new Uint8Array(encryptedData.encryptedKey.slice(2).match(/.{1,2}/g).map(b => parseInt(b,16)));
+        const ivBytes = new Uint8Array(encryptedData.iv.slice(2).match(/.{1,2}/g).map(b => parseInt(b,16)));
+        const ciphertextBytes = new Uint8Array(encryptedData.ciphertext.slice(2).match(/.{1,2}/g).map(b => parseInt(b,16)));
+
+        const rawAesKey = await crypto.subtle.decrypt({ name: "RSA-OAEP" }, privateKey, encryptedKeyBytes);
+        const aesKey = await crypto.subtle.importKey("raw", rawAesKey, { name: "AES-GCM" }, false, ["decrypt"]);
+
+        const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: ivBytes }, aesKey, ciphertextBytes);
+        return new TextDecoder().decode(decrypted);
+    } catch (e) {
+        console.warn('Decryption failed:', e);
+        return null;
     }
-
-    const privateKey = await crypto.subtle.importKey("jwk", userRSAKeyPair.privateKey, { name: "RSA-OAEP", hash: "SHA-256" }, false, ["decrypt"]);
-
-    const encryptedKeyBytes = new Uint8Array(encryptedData.encryptedKey.slice(2).match(/.{1,2}/g).map(b => parseInt(b,16)));
-    const ivBytes = new Uint8Array(encryptedData.iv.slice(2).match(/.{1,2}/g).map(b => parseInt(b,16)));
-    const ciphertextBytes = new Uint8Array(encryptedData.ciphertext.slice(2).match(/.{1,2}/g).map(b => parseInt(b,16)));
-
-    const rawAesKey = await crypto.subtle.decrypt({ name: "RSA-OAEP" }, privateKey, encryptedKeyBytes);
-    const aesKey = await crypto.subtle.importKey("raw", rawAesKey, { name: "AES-GCM" }, false, ["decrypt"]);
-
-    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: ivBytes }, aesKey, ciphertextBytes);
-    return new TextDecoder().decode(decrypted);
 }
 
 // ─── Подпись и отправка сообщений (с fallback-ом на незашифрованное) ─────────
@@ -508,7 +513,7 @@ async function sendMessage() {
     }
 }
 
-// ─── Загрузка сообщений (с определением типа) ─────────────────────────────────
+// ─── Загрузка сообщений (с показом плейсхолдера при ошибке расшифровки) ───────
 async function loadMessagesForChat(chatId) {
     if (!signer || !userAddress) return;
 
@@ -527,34 +532,25 @@ async function loadMessagesForChat(chatId) {
             let isEncrypted = false;
             const isSentByMe = m.sender.toLowerCase() === userAddress.toLowerCase();
 
-            // Если сообщение отправлено мной, пытаемся его расшифровать, но если не получается — показываем как есть
-            // (обычно отправитель не может расшифровать своё же сообщение, зашифрованное для получателя)
-            if (isSentByMe) {
-                try {
-                    const parsed = JSON.parse(m.text);
-                    if (parsed.ciphertext && parsed.encryptedKey && parsed.iv) {
-                        // Пытаемся расшифровать (может не получиться)
-                        displayText = await hybridDecrypt(parsed);
+            // Пытаемся распознать и расшифровать
+            try {
+                const parsed = JSON.parse(m.text);
+                if (parsed.ciphertext && parsed.encryptedKey && parsed.iv) {
+                    const decrypted = await hybridDecrypt(parsed);
+                    if (decrypted !== null) {
+                        displayText = decrypted;
                         isEncrypted = true;
                     } else {
-                        displayText = m.text;
+                        // Не удалось расшифровать
+                        displayText = '[Зашифрованное сообщение]';
+                        isEncrypted = true; // технически оно зашифровано
                     }
-                } catch (e) {
+                } else {
                     displayText = m.text;
                 }
-            } else {
-                // Входящее сообщение
-                try {
-                    const parsed = JSON.parse(m.text);
-                    if (parsed.ciphertext && parsed.encryptedKey && parsed.iv) {
-                        displayText = await hybridDecrypt(parsed);
-                        isEncrypted = true;
-                    } else {
-                        displayText = m.text;
-                    }
-                } catch (e) {
-                    displayText = m.text;
-                }
+            } catch (e) {
+                // Не JSON – оставляем как есть
+                displayText = m.text;
             }
 
             formatted.push({
