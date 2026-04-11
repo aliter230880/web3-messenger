@@ -1,5 +1,5 @@
-// Web3 Messenger - App Logic v4
-// ✅ Contacts + Share Profile + Wallet Signature + Admin UI
+// Web3 Messenger - App Logic v5
+// ✅ Contacts + Share Profile + Wallet Signature + Admin UI + Registration
 
 console.log('🚀 Web3 Messenger loaded');
 
@@ -10,6 +10,7 @@ if (typeof ethers === 'undefined') {
 // ─── Глобальные переменные ──────────────────────────────────────────────────
 let provider, signer, userAddress;
 let isAdmin = false;
+let currentUsername = '';
 const ADMIN_ADDRESS    = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
 const CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
 const BASE_URL         = "https://aliter230880.github.io/web3-messenger/";
@@ -128,6 +129,7 @@ async function initWallet() {
         updateWalletUI();
         updateInputState();
         updateShareButton();
+        await checkRegistration();
     } catch (e) {
         console.error('Init error:', e);
         showError('wallet-msg', 'Ошибка: ' + e.message);
@@ -149,12 +151,100 @@ async function connectWallet() {
         await initWallet();
         msg.textContent = '✅ Подключено!';
         msg.className   = 'status-msg success';
-        setTimeout(() => closeModal('wallet-modal'), 1000);
+        setTimeout(() => closeModal('wallet-modal'), 800);
     } catch (e) {
         console.error('Connect error:', e);
         msg.textContent = '❌ ' + (e.message || 'Отменено');
         msg.className   = 'status-msg error';
         btn.disabled    = false;
+    }
+}
+
+// ─── Регистрация ──────────────────────────────────────────────────────────────
+async function checkRegistration() {
+    if (!provider || !userAddress) return;
+    try {
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, [
+            "function isRegistered(address) view returns (bool)"
+        ], provider);
+        const registered = await contract.isRegistered(userAddress);
+        if (!registered) {
+            setTimeout(() => openRegisterModal(), 900);
+        } else {
+            const profile = await getProfileByAddress(userAddress);
+            if (profile && profile.username) {
+                currentUsername = profile.username;
+                updateWalletUI();
+            }
+        }
+    } catch (e) {
+        console.warn('Registration check skipped:', e.message);
+    }
+}
+
+function openRegisterModal() {
+    const modal = document.getElementById('register-modal');
+    if (!modal) return;
+    const addrEl = document.getElementById('register-address-display');
+    if (addrEl) addrEl.textContent = userAddress || '';
+    modal.style.display = 'flex';
+    document.getElementById('register-username').value = '';
+    const msgEl = document.getElementById('register-msg');
+    msgEl.textContent = '';
+    msgEl.className   = 'status-msg';
+    document.getElementById('register-btn').disabled = false;
+}
+
+function closeRegisterModal() {
+    document.getElementById('register-modal').style.display = 'none';
+}
+
+async function registerUser() {
+    const usernameInput = document.getElementById('register-username');
+    const msgEl         = document.getElementById('register-msg');
+    const btn           = document.getElementById('register-btn');
+    const username      = usernameInput.value.trim();
+
+    if (!username) {
+        msgEl.textContent = '⚠️ Введите никнейм';
+        msgEl.className   = 'status-msg error';
+        return;
+    }
+    if (username.length < 3) {
+        msgEl.textContent = '⚠️ Никнейм минимум 3 символа';
+        msgEl.className   = 'status-msg error';
+        return;
+    }
+    if (!/^[a-zA-Z0-9_а-яёА-ЯЁ]+$/.test(username)) {
+        msgEl.textContent = '⚠️ Только буквы, цифры и знак _';
+        msgEl.className   = 'status-msg error';
+        return;
+    }
+
+    btn.disabled      = true;
+    msgEl.textContent = '⏳ Отправка транзакции...';
+    msgEl.className   = 'status-msg info';
+
+    try {
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, [
+            "function registerProfile(string username, string avatarCID, string bio) external"
+        ], signer);
+        const tx = await contract.registerProfile(username, '', '');
+
+        msgEl.textContent = '⏳ Ожидание подтверждения в блокчейне...';
+        await tx.wait();
+
+        currentUsername = username;
+        closeRegisterModal();
+        updateWalletUI();
+        showToast('✅ Добро пожаловать, ' + username + '! Профиль создан в Polygon.', 'success');
+        console.log('✅ Registered:', username, tx.hash);
+    } catch (e) {
+        console.error('Register error:', e);
+        const errMsg = e.reason || e?.data?.message || e.message || 'Ошибка транзакции';
+        msgEl.textContent = '❌ ' + errMsg;
+        msgEl.className   = 'status-msg error';
+        btn.disabled      = false;
     }
 }
 
@@ -194,7 +284,6 @@ async function accessEscrowKey() {
         // const contract = new ethers.Contract(CONTRACT_ADDRESS, ["function getEscrowedKey(address) view returns (bytes)"], signer);
         // const encryptedKey = await contract.getEscrowedKey(userAddr);
 
-        // 👇 Демо-имитация:
         await new Promise(r => setTimeout(r, 1200));
         const mockKey = "0x" + Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('');
 
@@ -224,12 +313,7 @@ async function openShareModal() {
     linkInput.value = shareUrl;
 
     qrContainer.innerHTML = '';
-    new QRCode(qrContainer, {
-        text: shareUrl,
-        width: 180,
-        height: 180,
-        correctLevel: QRCode.CorrectLevel.M
-    });
+    new QRCode(qrContainer, { text: shareUrl, width: 180, height: 180, correctLevel: QRCode.CorrectLevel.M });
 
     modal.style.display = 'flex';
 }
@@ -290,7 +374,6 @@ async function addContactFromInput() {
                 showStatus('ℹ️ Контакт уже в списке', 'info');
             }
         } else {
-            // Добавляем по адресу даже без профиля в контракте
             if (contactsStore.add({ address })) {
                 renderChatList();
                 showStatus('✅ Контакт добавлен', 'success');
@@ -305,7 +388,6 @@ async function addContactFromInput() {
 }
 
 async function resolveUsername(username) {
-    // Заглушка — можно подключить ENS/PNS позже
     return null;
 }
 
@@ -339,7 +421,6 @@ async function sendMessage() {
         renderMessages();
         console.log('✅ Signed:', signature.slice(0, 20) + '...');
 
-        // Авто-ответ (демо)
         setTimeout(() => {
             const reply = {
                 id: Date.now() + 1,
@@ -425,14 +506,10 @@ function renderChatList() {
 
 function selectChat(id) {
     store.currentChat = id;
-    const allChats = [
-        ...store.chats,
-        ...contactsStore.list.map(c => ({
-            id: c.address,
-            name: c.username || c.address.slice(0, 8) + '...',
-            avatar: '👤', online: false, messages: [], ...c
-        }))
-    ];
+    const allChats = [...store.chats, ...contactsStore.list.map(c => ({
+        id: c.address, name: c.username || c.address.slice(0, 8) + '...', avatar: '👤',
+        online: false, messages: [], ...c
+    }))];
     const chat = allChats.find(c => c.id === id);
     if (chat) {
         chat.unread = 0;
@@ -502,7 +579,8 @@ function updateInputState() {
 function updateWalletUI() {
     const btn = document.getElementById('wallet-btn');
     if (btn && userAddress) {
-        btn.innerHTML = `<span>✅</span><span>${userAddress.slice(0, 6)}...${userAddress.slice(-4)}</span>`;
+        const display = currentUsername || (userAddress.slice(0, 6) + '...' + userAddress.slice(-4));
+        btn.innerHTML = `<span>✅</span><span style="font-size:9px;max-width:52px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${display}</span>`;
         btn.onclick   = null;
     }
 }
@@ -537,11 +615,24 @@ function showError(elId, msg) {
 function showStatus(msg, type) {
     const el = document.getElementById('wallet-msg');
     if (el) {
-        el.textContent    = msg;
-        el.className      = `status-msg ${type}`;
-        el.style.display  = 'block';
+        el.textContent   = msg;
+        el.className     = `status-msg ${type}`;
+        el.style.display = 'block';
         setTimeout(() => el.style.display = 'none', 2500);
     }
+}
+
+function showToast(msg, type = 'success') {
+    let toast = document.getElementById('global-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'global-toast';
+        document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.className   = `toast toast-${type} toast-show`;
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => toast.classList.remove('toast-show'), 3500);
 }
 
 // ─── Утилиты ─────────────────────────────────────────────────────────────────
@@ -564,3 +655,6 @@ window.shareToWhatsApp     = shareToWhatsApp;
 window.shareToTwitter      = shareToTwitter;
 window.addContactFromInput = addContactFromInput;
 window.closeModal          = closeModal;
+window.openRegisterModal   = openRegisterModal;
+window.closeRegisterModal  = closeRegisterModal;
+window.registerUser        = registerUser;
