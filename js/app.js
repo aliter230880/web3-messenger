@@ -1,11 +1,12 @@
-// Web3 Messenger - App Logic v7.8
+// Web3 Messenger - App Logic v7.9
 // ✅ Auto-refresh current chat every 10s (no flicker)
-// ✅ Background discovery of new conversations (every 30s)
+// ✅ Instant discovery of new conversations when message arrives
 // ✅ Persistent chat deletion
 // ✅ All messages sent as plaintext (encryption temporarily disabled)
+// ✅ User avatar menu with profile, contacts, settings, logout
 // ✅ Smooth account change handling
 
-console.log('🚀 Web3 Messenger v7.8 loaded (plaintext mode)');
+console.log('🚀 Web3 Messenger v7.9 loaded (plaintext mode)');
 
 if (typeof ethers === 'undefined') {
     console.error('❌ ethers.js не загружен! Проверьте CDN в index.html');
@@ -171,7 +172,7 @@ async function initWallet() {
 
         isAdmin = userAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
         updateAdminButton();
-        updateWalletUI();
+        updateAvatarMenu(); // обновляем аватарку и меню
         updateInputState();
         updateShareButton();
         await checkRegistration();
@@ -224,7 +225,7 @@ async function checkRegistration() {
             const profile = await getProfileByAddress(userAddress);
             if (profile && profile.username) {
                 currentUsername = profile.username;
-                updateWalletUI();
+                updateAvatarMenu();
             }
         }
     } catch (e) {
@@ -286,7 +287,7 @@ async function registerUser() {
 
         currentUsername = username;
         closeRegisterModal();
-        updateWalletUI();
+        updateAvatarMenu();
         showToast('✅ Добро пожаловать, ' + username + '! Профиль создан в Polygon.', 'success');
         console.log('✅ Registered:', username, tx.hash);
     } catch (e) {
@@ -355,7 +356,6 @@ async function sendMessage() {
 
         input.value = '';
         showToast('✅ Сообщение сохранено в блокчейне!', 'success');
-        // Загружаем свежие сообщения, чтобы синхронизироваться с блокчейном
         await loadMessagesForChat(recipient);
     } catch (e) {
         console.error('Send error:', e);
@@ -368,7 +368,7 @@ async function sendMessage() {
     }
 }
 
-// ─── Загрузка сообщений ───────────────────────────────────────────────────────
+// ─── Загрузка сообщений (с мгновенным созданием чата при необходимости) ───────
 async function loadMessagesForChat(chatId) {
     if (!signer || !userAddress) return;
 
@@ -380,6 +380,30 @@ async function loadMessagesForChat(chatId) {
         const [sent, received] = await msgContract.getConversation(userAddress, counterparty, 0, 50);
 
         const allMessages = [...sent, ...received].sort((a, b) => a.timestamp - b.timestamp);
+        if (allMessages.length === 0) return;
+
+        // Если чата ещё нет и сообщения есть — создаём его немедленно
+        let chat = getChatById(chatId);
+        if (!chat) {
+            // Проверяем, не удалён ли чат ранее
+            if (deletedChatsStore.has(counterparty)) return;
+
+            const profile = await getProfileByAddress(counterparty);
+            const name = profile?.username || counterparty.slice(0, 8) + '...';
+            contactsStore.add({ address: counterparty, username: profile?.username });
+            chat = {
+                id: counterparty,
+                name: name,
+                avatar: '👤',
+                online: false,
+                folder: 'personal',
+                messages: [],
+                isContact: true
+            };
+            store.chats.push(chat);
+            renderChatList();
+            console.log(`🆕 Чат с ${counterparty} создан при загрузке сообщений`);
+        }
 
         const formatted = [];
         for (const m of allMessages) {
@@ -396,22 +420,6 @@ async function loadMessagesForChat(chatId) {
             });
         }
 
-        let chat = getChatById(chatId);
-        if (!chat) {
-            const profile = await getProfileByAddress(counterparty);
-            const name = profile?.username || counterparty.slice(0, 8) + '...';
-            contactsStore.add({ address: counterparty, username: profile?.username });
-            chat = {
-                id: counterparty,
-                name: name,
-                avatar: '👤',
-                online: false,
-                folder: 'personal',
-                messages: [],
-                isContact: true
-            };
-            store.chats.push(chat);
-        }
         chat.messages = formatted;
         if (formatted.length > 0) {
             const last = formatted[formatted.length-1];
@@ -434,7 +442,7 @@ async function refreshCurrentChat() {
     if (!autoRefreshInterval) showToast('🔄 Чат обновлён', 'info');
 }
 
-// ─── Автообновление текущего чата (без моргания) ─────────────────────────────
+// ─── Автообновление текущего чата ─────────────────────────────────────────────
 function startAutoRefresh() {
     if (autoRefreshInterval) clearInterval(autoRefreshInterval);
     autoRefreshInterval = setInterval(async () => {
@@ -444,6 +452,7 @@ function startAutoRefresh() {
     }, 10000);
 }
 
+// Фоновое обнаружение (на случай, если сообщение пришло, а чат не открыт)
 function startDiscovery() {
     if (discoveryInterval) clearInterval(discoveryInterval);
     discoveryInterval = setInterval(async () => {
@@ -508,7 +517,7 @@ function getChatById(id) {
     return store.chats.find(c => c.id === id);
 }
 
-// ─── Рендеринг (оптимизированный, без моргания) ──────────────────────────────
+// ─── Рендеринг ───────────────────────────────────────────────────────────────
 function renderSidebar() {
     document.querySelectorAll('.sidebar-item').forEach(item => {
         if (item.dataset.folder) {
@@ -691,15 +700,68 @@ function updateInputState() {
     }
 }
 
-function updateWalletUI() {
-    const btn = document.getElementById('wallet-btn');
-    if (btn && userAddress) {
+// ─── Аватар и меню пользователя ───────────────────────────────────────────────
+function updateAvatarMenu() {
+    const avatarBtn = document.getElementById('user-avatar-btn');
+    const avatarEmoji = document.getElementById('user-avatar-emoji');
+    if (avatarBtn && userAddress) {
         const display = currentUsername || (userAddress.slice(0, 6) + '...' + userAddress.slice(-4));
-        btn.innerHTML = `<span>✅</span><span style="font-size:9px;max-width:52px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${display}</span>`;
-        btn.onclick   = null;
-    } else if (btn) {
-        btn.innerHTML = `<span>🦊</span><span>Подключить</span>`;
-        btn.onclick   = () => openModal('wallet-modal');
+        avatarEmoji.textContent = currentUsername ? currentUsername.charAt(0).toUpperCase() : '👤';
+        avatarBtn.title = display;
+        avatarBtn.style.display = 'flex';
+    } else if (avatarBtn) {
+        avatarBtn.style.display = 'none';
+    }
+
+    // Обновляем данные в профиле
+    const profileAddress = document.getElementById('profile-address');
+    const profileUsername = document.getElementById('profile-username');
+    if (profileAddress) profileAddress.textContent = userAddress || '—';
+    if (profileUsername) profileUsername.textContent = currentUsername || 'Не задан';
+}
+
+function toggleUserMenu() {
+    const menu = document.getElementById('user-dropdown-menu');
+    if (menu) menu.classList.toggle('hidden');
+}
+
+function openProfileModal() {
+    updateAvatarMenu();
+    openModal('profile-modal');
+    toggleUserMenu();
+}
+
+function openContactsModal() {
+    renderContactsList();
+    openModal('contacts-modal');
+    toggleUserMenu();
+}
+
+function renderContactsList() {
+    const container = document.getElementById('contacts-list');
+    if (!container) return;
+    if (contactsStore.list.length === 0) {
+        container.innerHTML = '<p class="text-zinc-500 text-sm text-center py-4">Нет контактов</p>';
+        return;
+    }
+    container.innerHTML = contactsStore.list.map(c => `
+        <div class="contact-item">
+            <span class="font-mono text-xs">${c.username || c.address.slice(0,8)+'...'}</span>
+            <span class="text-zinc-500 text-xs">${c.address.slice(0,6)}...${c.address.slice(-4)}</span>
+            <button onclick="contactsStore.remove('${c.address}'); renderContactsList(); renderChatList();" class="text-red-400 hover:text-red-300 text-xs">Удалить</button>
+        </div>
+    `).join('');
+}
+
+function logout() {
+    if (confirm('Выйти из аккаунта?')) {
+        userAddress = null;
+        signer = null;
+        updateAvatarMenu();
+        updateInputState();
+        renderEmptyState();
+        showToast('Вы вышли из кошелька', 'info');
+        toggleUserMenu();
     }
 }
 
@@ -707,7 +769,7 @@ function updateWalletUI() {
 function setupEventListeners() {
     document.getElementById('send-btn').onclick     = sendMessage;
     document.getElementById('msg-input').onkeypress = e => { if (e.key === 'Enter') sendMessage(); };
-    document.getElementById('wallet-btn').onclick   = () => openModal('wallet-modal');
+    document.getElementById('user-avatar-btn').onclick = toggleUserMenu;
     document.getElementById('connect-btn').onclick  = connectWallet;
     document.getElementById('refresh-chat-btn').onclick = refreshCurrentChat;
 
@@ -719,12 +781,21 @@ function setupEventListeners() {
         });
     };
 
+    // Закрытие меню при клике вне
+    document.addEventListener('click', (e) => {
+        const menu = document.getElementById('user-dropdown-menu');
+        const btn = document.getElementById('user-avatar-btn');
+        if (menu && !menu.classList.contains('hidden') && !btn.contains(e.target) && !menu.contains(e.target)) {
+            menu.classList.add('hidden');
+        }
+    });
+
     if (window.ethereum) {
         window.ethereum.on("accountsChanged", async (accounts) => {
             if (accounts.length === 0) {
                 userAddress = null;
                 signer = null;
-                updateWalletUI();
+                updateAvatarMenu();
                 updateInputState();
                 showToast('Кошелёк отключён', 'info');
                 stopAllIntervals();
@@ -802,6 +873,7 @@ function openAdminModal() {
     document.getElementById('admin-modal').style.display = 'flex';
     document.getElementById('escrow-status').style.display = 'none';
     document.getElementById('escrow-user-address').value = '';
+    toggleUserMenu();
 }
 
 async function accessEscrowKey() {
@@ -842,6 +914,7 @@ async function openShareModal() {
     qrContainer.innerHTML = '';
     new QRCode(qrContainer, { text: shareUrl, width: 180, height: 180, correctLevel: QRCode.CorrectLevel.M });
     modal.style.display = 'flex';
+    toggleUserMenu();
 }
 
 async function copyShareLink() {
@@ -898,6 +971,7 @@ async function addContactFromInput() {
 
 function openSettingsModal() {
     openModal('settingsModal');
+    toggleUserMenu();
 }
 
 // ─── Глобальный экспорт ──────────────────────────────────────────────────────
@@ -920,3 +994,7 @@ window.refreshCurrentChat  = refreshCurrentChat;
 window.verifySignature     = verifySignature;
 window.deleteChat          = deleteChat;
 window.openSettingsModal   = openSettingsModal;
+window.toggleUserMenu      = toggleUserMenu;
+window.openProfileModal    = openProfileModal;
+window.openContactsModal   = openContactsModal;
+window.logout              = logout;
