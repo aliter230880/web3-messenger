@@ -1,143 +1,94 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web3 Messenger</title>
-    <link rel="stylesheet" href="css/style.css">
-    <!-- Ethers.js для работы с блокчейном -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" integrity="sha512-R6zRb4uEXY1Vd5K6E1g3x8F7h5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5K5......" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <!-- QR Code Generator -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <link rel="icon" href="data:,">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web3 Messenger</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 </head>
 <body>
-    <div class="app-container">
-        <!-- Left Sidebar -->
-        <aside class="sidebar">
-            <div class="sidebar-item active" data-folder="all">
-                <span>💬</span><span>Все</span><span class="sidebar-badge" id="all-badge">147</span>
-            </div>
-            <div class="sidebar-item" data-folder="personal">
-                <span>👤</span><span>Личное</span><span class="sidebar-badge" id="personal-badge"></span>
-            </div>
-            <div class="sidebar-item" data-folder="news">
-                <span>📰</span><span>Новости</span><span class="sidebar-badge" id="news-badge">11</span>
-            </div>
-            <div class="sidebar-item" data-folder="work">
-                <span>💼</span><span>Работа</span><span class="sidebar-badge" id="work-badge">38</span>
-            </div>
-            <div class="sidebar-item" style="margin-top: auto;" id="wallet-btn">
-                <span>🦊</span><span>Подключить</span>
-            </div>
-            <!-- 🔐 Кнопка Админ (видна только владельцу) -->
-            <div class="sidebar-item" id="admin-btn" style="display:none;" onclick="openAdminModal()">
-                <span>🛡️</span><span>Админ</span>
-            </div>
-        </aside>
+<div class="app-container">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-item active" data-folder="all">
+      <span>💬</span><span>Все</span><span class="sidebar-badge">147</span>
+    </div>
+    <div class="sidebar-item" data-folder="personal">
+      <span>👤</span><span>Личное</span>
+    </div>
+    <div class="sidebar-item" data-folder="news">
+      <span>📰</span><span>Новости</span><span class="sidebar-badge">11</span>
+    </div>
+    <div class="sidebar-item" data-folder="work">
+      <span>💼</span><span>Работа</span><span class="sidebar-badge">38</span>
+    </div>
+    <div class="sidebar-item" style="margin-top: auto;" id="admin-btn" style="display:none;">
+      <span>🛡️</span><span>Админ</span>
+    </div>
+  </aside>
 
-        <!-- Chat List Panel -->
-        <div class="chat-panel">
-            <div class="chat-header">
-                <!-- Поиск контактов -->
-                <div class="add-contact-box">
-                    <input type="text" id="add-contact-input" placeholder="0xAddress или имя...">
-                    <button class="icon-btn" onclick="addContactFromInput()" title="Добавить контакт">➕</button>
-                </div>
-                <div class="search-box">
-                    <span>🔍</span><input type="text" placeholder="Search" id="search-input">
-                </div>
-                <div class="chat-tabs">
-                    <div class="chat-tab active" data-tab="all">Все</div>
-                    <div class="chat-tab" data-tab="unread">Непрочитанные</div>
-                    <div class="chat-tab" data-tab="vip">VIP</div>
-                </div>
-            </div>
-            <div class="chat-list" id="chat-list"></div>
-        </div>
+  <!-- CHAT LIST PANEL -->
+  <div class="chat-panel">
+    <div class="chat-header">
+      <div class="search-box">
+        <span>🔍</span>
+        <input type="text" placeholder="Search" id="search-input">
+      </div>
+      <div class="chat-tabs">
+        <div class="chat-tab active">Все</div>
+        <div class="chat-tab">Непрочитанные</div>
+        <div class="chat-tab">VIP</div>
+      </div>
+    </div>
+    <div class="chat-list" id="chat-list"></div>
+  </div>
 
-        <!-- Main Chat Area -->
-        <main class="chat-area">
-            <div class="chat-top-bar">
-                <div class="chat-top-avatar" id="chat-avatar">👤</div>
-                <div class="chat-top-info">
-                    <div class="chat-top-name" id="chat-name">Выберите чат</div>
-                    <div class="chat-top-status" id="chat-status">—</div>
-                </div>
-                <div class="encryption-badge">🔐 E2E</div>
-                <!-- Кнопка Поделиться профилем -->
-                <button class="share-btn" id="share-profile-btn" title="Поделиться профилем" style="display:none;" onclick="openShareModal()">🔗</button>
-            </div>
-            <div class="messages-container" id="messages-container">
-                <div class="empty-state">
-                    <div class="empty-state-icon">💬</div>
-                    <h3>Добро пожаловать</h3>
-                    <p>Выберите чат и подключите кошелёк</p>
-                </div>
-            </div>
-            <div class="input-container">
-                <button class="icon-btn">📎</button>
-                <div class="input-wrapper">
-                    <input type="text" placeholder="Подключите кошелёк..." disabled id="msg-input">
-                    <button class="icon-btn">😊</button>
-                </div>
-                <button class="send-btn" disabled id="send-btn">➤</button>
-            </div>
-        </main>
+  <!-- MAIN CHAT AREA -->
+  <main class="chat-area">
+    <div class="chat-top-bar">
+      <div class="chat-top-avatar" id="chat-avatar">👤</div>
+      <div class="chat-top-info">
+        <div class="chat-top-name" id="chat-name">Выберите чат</div>
+        <div class="chat-top-status" id="chat-status">—</div>
+      </div>
+      <!-- 🔥 КНОПКА КОШЕЛЬКА В ШАПКЕ (не наползает!) -->
+      <button id="wallet-btn" class="wallet-btn">🦊 Подключить</button>
+      <div class="encryption-badge">🔐 E2E</div>
     </div>
 
-    <!-- Wallet Modal -->
-    <div id="wallet-modal" class="modal" style="display:none;">
-        <div class="modal-content">
-            <h3>🔗 Подключить кошелёк</h3>
-            <p>Для отправки сообщений нужен MetaMask</p>
-            <button id="connect-btn" class="btn-primary">Подключить MetaMask</button>
-            <p id="wallet-msg" class="status-msg"></p>
-            <button class="btn-secondary" onclick="closeModal('wallet-modal')">Закрыть</button>
-        </div>
+    <div class="messages-container" id="messages-container">
+      <div class="empty-state" id="empty-state">
+        <div class="empty-state-icon">💬</div>
+        <h3>Добро пожаловать в Web3 Messenger</h3>
+        <p>Выберите чат слева, чтобы начать общение</p>
+        <p style="margin-top:12px;font-size:12px;color:var(--text-muted)">🔒 Все сообщения зашифрованы</p>
+      </div>
     </div>
 
-    <!-- 🔐 Admin Modal: Key Escrow -->
-    <div id="admin-modal" class="modal" style="display:none;">
-        <div class="modal-content">
-            <h3>🛡️ Админ-панель: Key Escrow</h3>
-            <p>Доступ только для владельца. Введите адрес пользователя для извлечения зашифрованного мастер-ключа.</p>
-            <input type="text" id="escrow-user-address" placeholder="0x..." class="input-field">
-            <button id="btn-access-escrow" class="btn-primary" onclick="accessEscrowKey()">🔓 Получить доступ к ключу</button>
-            <div id="escrow-status" class="status-msg" style="display:none;"></div>
-            <button class="btn-secondary" onclick="closeModal('admin-modal')">Закрыть</button>
-        </div>
+    <div class="input-container">
+      <button class="icon-btn" title="Прикрепить">📎</button>
+      <div class="input-wrapper">
+        <input type="text" placeholder="Написать сообщение..." disabled id="msg-input">
+        <button class="icon-btn" title="Эмодзи">😊</button>
+      </div>
+      <button class="send-btn" disabled id="send-btn" title="Отправить">➤</button>
     </div>
+  </main>
+</div>
 
-    <!-- 🔗 Share Profile Modal -->
-    <div id="share-modal" class="modal" style="display:none;">
-        <div class="modal-content">
-            <h3>🔗 Поделиться профилем</h3>
-            <p>Отправьте ссылку или отсканируйте QR-код</p>
-            
-            <div class="qr-container" id="qr-container"></div>
-            
-            <div class="share-link-box">
-                <input type="text" id="share-link-input" readonly class="share-link">
-                <button class="copy-btn" onclick="copyShareLink()">📋</button>
-            </div>
-            
-            <div class="share-buttons">
-                <button class="share-btn-telegram" onclick="shareToTelegram()">
-                    <span>✈️</span> Telegram
-                </button>
-                <button class="share-btn-whatsapp" onclick="shareToWhatsApp()">
-                    <span>💬</span> WhatsApp
-                </button>
-                <button class="share-btn-twitter" onclick="shareToTwitter()">
-                    <span>🐦</span> Twitter
-                </button>
-            </div>
-            
-            <button class="btn-secondary" onclick="closeModal('share-modal')">Закрыть</button>
-        </div>
-    </div>
+<!-- 🔐 ADMIN MODAL: Key Escrow -->
+<div id="admin-modal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <h3>🛡️ Админ-панель: Key Escrow</h3>
+    <p>Доступ только для владельца платформы. Введите адрес пользователя для извлечения зашифрованного мастер-ключа.</p>
+    <input type="text" id="escrow-user-address" placeholder="Адрес пользователя (0x...)" class="input-field">
+    <button id="btn-access-escrow" class="btn-primary">🔓 Получить доступ к ключу</button>
+    <div id="escrow-status" class="status-msg" style="display:none;"></div>
+    <button onclick="closeModal('admin-modal')" class="btn-secondary">Закрыть</button>
+  </div>
+</div>
 
-    <script src="js/app.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>
