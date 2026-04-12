@@ -1,9 +1,9 @@
-// Web3 Messenger v9.0 — Session Key Architecture (No Re-Signing)
-console.log('🚀 Web3 Messenger v9.0 (Session Keys & Password Auth)');
+// Web3 Messenger v8.2 Fixed — Stable E2E with Session Caching
+console.log('🚀 Web3 Messenger v8.2 Fixed');
 if (typeof ethers === 'undefined') console.error('❌ ethers.js not loaded');
 if (typeof nacl === 'undefined') console.error('❌ tweetnacl not loaded');
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Constants ───────────────────────────────────────────────────────────────
 const ADMIN_ADDRESS = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
 const IDENTITY_CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
 const MESSAGE_CONTRACT_ADDRESS = "0x906DCA5190841d5F0acF8244bd8c176ecb24139D";
@@ -30,9 +30,6 @@ let isAdmin = false, currentUsername = '';
 let isInitializing = false;
 let autoRefreshInterval, discoveryInterval;
 let lastScannedBlock = 0;
-
-// Session Key Storage (In-Memory for active session)
-const sessionKeys = new Map();
 
 // Stores
 const contactsStore = {
@@ -105,67 +102,41 @@ function avatarEl(chat, size = 46) {
     return div;
 }
 
-// ─── CRYPTO CORE: Session Keys & E2E ─────────────────────────────────────────
+// ─── E2E Encryption (Fixed Caching) ───────────────────────────────────────────
+const sharedKeyCache = new Map();
 
-async function deriveKeyFromPassword(password, salt) {
-    const enc = new TextEncoder();
-    const keyMaterial = await window.crypto.subtle.importKey(
-        "raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveBits"]
-    );
-    const keyBits = await window.crypto.subtle.deriveBits(
-        {
-            name: "PBKDF2",
-            salt: enc.encode(salt),
-            iterations: 100000,
-            hash: "SHA-256"
-        },
-        keyMaterial,
-        256 // 32 bytes
-    );
-    return new Uint8Array(keyBits);
-}
-
-async function ensureSessionKey(password = null) {
-    if (!userAddress) throw new Error("No user address");
+async function getSharedKey(peer) {
+    if (!signer) throw new Error('Signer not available');
     
-    if (sessionKeys.has(userAddress)) {
-        return sessionKeys.get(userAddress);
+    const addresses = [userAddress.toLowerCase(), peer.toLowerCase()].sort();
+    const cacheKey = addresses.join(':');
+
+    // Check Cache First (No Signature Needed if Cached)
+    if (sharedKeyCache.has(cacheKey)) {
+        return sharedKeyCache.get(cacheKey);
     }
 
-    if (password) {
-        const salt = `w3m-salt-${userAddress.toLowerCase()}`;
-        const masterKey = await deriveKeyFromPassword(password, salt);
-        sessionKeys.set(userAddress, masterKey);
-        localStorage.setItem(`w3m_session_active_${userAddress.toLowerCase()}`, 'true');
-        console.log("🔑 [Session] Master Key generated.");
-        return masterKey;
+    // Generate Key via Signature (Only Once Per Session Per Contact)
+    console.log(`🔑 [KeyGen] Generating key for ${cacheKey}...`);
+    const messageToSign = `chat-key-v1:${cacheKey}`;
+    
+    try {
+        const signature = await signer.signMessage(messageToSign);
+        const hash = ethers.utils.keccak256(signature);
+        const key = ethers.utils.arrayify(hash);
+        
+        sharedKeyCache.set(cacheKey, key);
+        console.log(`✅ [KeyGen] Key generated and cached.`);
+        return key;
+    } catch (e) {
+        console.error("❌ [KeyGen] Signing failed:", e);
+        throw e;
     }
-
-    return null;
-}
-
-async function getChatKey(peer) {
-    const masterKey = await ensureSessionKey();
-    if (!masterKey) throw new Error("Session not authenticated. Please enter password.");
-
-    const peerLower = peer.toLowerCase();
-    const userLower = userAddress.toLowerCase();
-    const chatId = [userLower, peerLower].sort().join(':');
-    
-    const cryptoKey = await window.crypto.subtle.importKey(
-        "raw", masterKey, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
-    );
-    
-    const signature = await window.crypto.subtle.sign(
-        "HMAC", cryptoKey, new TextEncoder().encode(chatId)
-    );
-    
-    return new Uint8Array(signature);
 }
 
 async function encrypt(text, peer) {
     try {
-        const key = await getChatKey(peer);
+        const key = await getSharedKey(peer);
         const nonce = nacl.randomBytes(nacl.secretbox.nonceLength);
         const messageBytes = new TextEncoder().encode(text);
         const encrypted = nacl.secretbox(messageBytes, nonce, key);
@@ -219,12 +190,12 @@ async function decryptWithKey(encBase64, key) {
     }
 }
 
-async function decryptMessageForChat(encBase64, chatId) {
+async function decrypt(encBase64, sender) {
     try { 
-        const key = await getChatKey(chatId); 
+        const key = await getSharedKey(sender); 
         return await decryptWithKey(encBase64, key); 
     } catch (e) { 
-        return "🔒 Нет доступа"; 
+        return "🔒 Нет ключа"; 
     }
 }
 
@@ -503,12 +474,10 @@ async function loadMessages(chatId, start = 0) {
     if (!signer || !userAddress) return;
     if (!ethers.utils.isAddress(chatId)) return;
     
-    if (!sessionKeys.has(userAddress)) {
-        openAuthModal();
-        return;
-    }
-
     try {
+        // Pre-fetch key to ensure it's cached before loop
+        await getSharedKey(chatId);
+
         const contract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
         const [sent, received] = await contract.getConversation(userAddress, chatId, start, MESSAGES_PER_PAGE);
         
@@ -529,7 +498,7 @@ async function loadMessages(chatId, start = 0) {
             let text = m.text;
             
             if (isValidBase64(m.text)) {
-                 text = await decryptMessageForChat(m.text, chatId);
+                 text = await decryptWithKey(m.text, sharedKeyCache.get([userAddress.toLowerCase(), chatId.toLowerCase()].sort().join(':')));
             }
             
             return { 
@@ -567,11 +536,6 @@ async function sendMessage() {
     const input = document.getElementById('msg-input');
     const text = input.value.trim();
     if (!text || !userAddress || !store.currentChat) return;
-    
-    if (!sessionKeys.has(userAddress)) {
-        openAuthModal();
-        return;
-    }
     
     if (!ethers.utils.isAddress(store.currentChat)) { 
         showToast('❌ Некорректный адрес', 'error'); 
@@ -633,8 +597,7 @@ async function refreshCurrentChat() {
 
 async function scanForNewSenders() {
     if (!provider || !userAddress) return;
-    if (!sessionKeys.has(userAddress)) return;
-
+    
     try {
         const curBlock = await provider.getBlockNumber();
         const from = lastScannedBlock ? lastScannedBlock+1 : Math.max(0, curBlock - SCAN_BLOCKS_BACK);
@@ -685,7 +648,7 @@ async function scanForNewSenders() {
 function startAutoRefresh() { 
     if (autoRefreshInterval) clearInterval(autoRefreshInterval); 
     autoRefreshInterval = setInterval(() => { 
-        if (store.currentChat && signer && sessionKeys.has(userAddress)) loadMessages(store.currentChat); 
+        if (store.currentChat && signer) loadMessages(store.currentChat); 
     }, 10000); 
 }
 
@@ -719,14 +682,10 @@ async function initWallet() {
             updateSidebarAvatar(); 
         }
         
-        const sessionActive = localStorage.getItem(`w3m_session_active_${userAddress.toLowerCase()}`);
-        if (!sessionActive || !sessionKeys.has(userAddress)) {
-            openAuthModal();
-        } else {
-            startAutoRefresh(); 
-            startDiscovery();
-            document.getElementById('wallet-modal').style.display = 'none';
-        }
+        startAutoRefresh(); 
+        startDiscovery();
+        
+        document.getElementById('wallet-modal').style.display = 'none';
         
     } catch(e) { 
         showToast('Ошибка подключения', 'error'); 
@@ -753,10 +712,7 @@ function logout() {
     signer = null; 
     currentUsername = ''; 
     isAdmin = false;
-    sessionKeys.clear(); 
-    
-    if (userAddress) localStorage.removeItem(`w3m_session_active_${userAddress.toLowerCase()}`);
-    
+    sharedKeyCache.clear(); 
     clearInterval(autoRefreshInterval); 
     clearInterval(discoveryInterval);
     
@@ -780,38 +736,6 @@ async function registerUser() {
         showToast('✅ Профиль создан!', 'success');
     } catch(e) { 
         showToast('❌ Ошибка регистрации', 'error'); 
-    }
-}
-
-// ─── Authentication Modal Logic ──────────────────────────────────────────────
-function openAuthModal() {
-    const modal = document.getElementById('auth-modal');
-    if (modal) {
-        modal.style.display = 'flex';
-    } else {
-        const pwd = prompt("🔐 Введите пароль для доступа к сообщениям:");
-        if (pwd) handleAuthSubmit(pwd);
-    }
-}
-
-async function handleAuthSubmit(password) {
-    if (!password || password.length < 4) {
-        showToast('Пароль слишком короткий', 'error');
-        return;
-    }
-    
-    try {
-        await ensureSessionKey(password);
-        closeModal('auth-modal');
-        showToast('🔓 Доступ получен', 'success');
-        
-        startAutoRefresh(); 
-        startDiscovery();
-        
-        if (store.currentChat) loadMessages(store.currentChat);
-        
-    } catch (e) {
-        showToast('Ошибка аутентификации', 'error');
     }
 }
 
@@ -997,4 +921,3 @@ window.shareToTelegram = shareToTelegram;
 window.shareToWhatsApp = shareToWhatsApp; 
 window.shareToTwitter = shareToTwitter;
 window.clearAllData = clearAllData;
-window.handleAuthSubmit = handleAuthSubmit;
