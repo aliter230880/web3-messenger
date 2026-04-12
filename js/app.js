@@ -1,12 +1,9 @@
-// ==================== КОНСТАНТЫ И ИНИЦИАЛИЗАЦИЯ ====================
 const ADMIN_ADDRESS = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
-const IDENTITY_CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
 const MESSAGE_CONTRACT_ADDRESS = "0x906DCA5190841d5F0acF8244bd8c176ecb24139D";
 
 const MESSAGE_ABI = [
   "function sendMessage(address recipient, string text, bytes signature) external",
-  "function getConversation(address userA, address userB, uint256 startIndex, uint256 count) view returns (tuple(address sender, string text, uint256 timestamp, bytes signature)[])",
-  "function messageCount(address, address) view returns (uint256)"
+  "function getConversation(address userA, address userB, uint256 startIndex, uint256 count) view returns (tuple(address sender, string text, uint256 timestamp, bytes signature)[])"
 ];
 
 const nacl = window.nacl;
@@ -16,7 +13,6 @@ let messageContract = null;
 let currentChat = null;
 let userAddress = null;
 
-// ==================== ПРОСТОЕ E2E ШИФРОВАНИЕ ====================
 async function getSharedKey(recipient) {
   const sorted = [userAddress.toLowerCase(), recipient.toLowerCase()].sort().join(':');
   const sig = await signer.signMessage(`chat-key-v1:${sorted}`);
@@ -43,26 +39,24 @@ async function decrypt(encryptedBase64, sender) {
     const decrypted = nacl.secretbox.open(box, nonce, key);
     return decrypted ? new TextDecoder().decode(decrypted) : "[🔐 Зашифровано]";
   } catch {
-    return "[🔐 Зашифровано — доступно только участникам чата]";
+    return "[🔐 Зашифровано — доступно только участникам]";
   }
 }
 
-// ==================== ОСНОВНЫЕ ФУНКЦИИ ====================
 async function connectWallet() {
-  if (!window.ethereum) return showToast("MetaMask не найден", "error");
+  if (!window.ethereum) return alert("MetaMask не найден");
   const provider = new ethers.BrowserProvider(window.ethereum);
   signer = await provider.getSigner();
   userAddress = await signer.getAddress();
   messageContract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
-  document.getElementById("connect-btn").innerHTML = `✓ ${userAddress.slice(0,6)}...`;
-  showToast("Кошелёк подключён", "success");
+  document.getElementById("connectBtn").innerHTML = `✓ ${userAddress.slice(0,6)}...`;
   loadChats();
 }
 
-async function sendMessage() {
-  const input = document.getElementById("msg-input");
+async function sendCurrentMessage() {
+  const input = document.getElementById("messageInput");
   const text = input.value.trim();
-  if (!text || !currentChat || !signer) return;
+  if (!text || !currentChat) return;
 
   const encrypted = await encrypt(text, currentChat);
   const signature = await signer.signMessage(text);
@@ -70,70 +64,57 @@ async function sendMessage() {
   try {
     const tx = await messageContract.sendMessage(currentChat, encrypted, signature);
     await tx.wait();
-
-    // Показываем себе расшифрованное сообщение
     addMessageToUI(text, true);
     input.value = "";
   } catch (e) {
-    showToast("Ошибка отправки", "error");
+    alert("Ошибка отправки");
   }
 }
 
 function addMessageToUI(text, isMine) {
-  const container = document.getElementById("messages-container");
+  const container = document.getElementById("messagesContainer");
   const div = document.createElement("div");
   div.className = `message ${isMine ? "sent" : "received"}`;
-  div.innerHTML = `
-    ${text}
-    <div class="encrypted text-[10px] mt-1 opacity-75">🔐 E2E</div>
-  `;
+  div.innerHTML = `${text}<div class="text-[10px] mt-2 opacity-70">🔐 E2E</div>`;
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
 }
 
 async function loadMessagesForChat(address) {
   currentChat = address;
-  const container = document.getElementById("messages-container");
-  container.innerHTML = "<p class='text-center text-zinc-500 py-8'>Загрузка...</p>";
+  const container = document.getElementById("messagesContainer");
+  container.innerHTML = "<p class='text-center text-zinc-400 py-12'>Загрузка сообщений...</p>";
 
-  try {
-    const data = await messageContract.getConversation(userAddress, address, 0, 100);
-    container.innerHTML = "";
+  const data = await messageContract.getConversation(userAddress, address, 0, 100);
+  container.innerHTML = "";
 
-    for (let msg of data) {
-      let displayText = msg.text;
-      if (msg.sender.toLowerCase() !== userAddress.toLowerCase()) {
-        displayText = await decrypt(msg.text, msg.sender);
-      }
-      addMessageToUI(displayText, msg.sender.toLowerCase() === userAddress.toLowerCase());
+  for (let msg of data) {
+    let displayText = msg.text;
+    if (msg.sender.toLowerCase() !== userAddress.toLowerCase()) {
+      displayText = await decrypt(msg.text, msg.sender);
     }
-  } catch (e) {
-    container.innerHTML = "<p class='text-red-400 text-center py-8'>Ошибка загрузки</p>";
+    addMessageToUI(displayText, msg.sender.toLowerCase() === userAddress.toLowerCase());
   }
 }
 
 function loadChats() {
-  const list = document.getElementById("chat-list");
+  const list = document.getElementById("chatList");
   list.innerHTML = `
-    <div onclick="loadMessagesForChat('0xB19aEe699eb4D2Af380c505E4d6A108b055916eB')" class="chat-item">
-      <div class="chat-avatar">👤</div>
-      <div class="chat-info">
-        <div class="chat-name">Админ</div>
-        <div class="chat-preview">Напишите сообщение</div>
+    <div onclick="loadMessagesForChat('0xB19aEe699eb4D2Af380c505E4d6A108b055916eB')" class="p-4 hover:bg-white/5 cursor-pointer flex items-center gap-3">
+      <div class="w-9 h-9 bg-yellow-400 text-zinc-900 rounded-2xl flex items-center justify-center text-xl">👑</div>
+      <div>
+        <p class="font-semibold">Админ</p>
+        <p class="text-xs text-zinc-400">0xB19a...916eB</p>
       </div>
-    </div>
-  `;
+    </div>`;
 }
 
-function showToast(text, type = "success") {
-  const toast = document.createElement("div");
-  toast.className = `toast toast-${type}`;
-  toast.textContent = text;
-  document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 3000);
+function switchFolder(folder) {
+  // Можно расширить позже
+  console.log("Переключено на папку:", folder);
 }
 
 // Инициализация
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("%c🔐 Web3 Messenger v7.9 + E2E шифрование (tweetnacl) запущен", "color:#facc15; font-weight:bold");
+  console.log("%c✅ Web3 Messenger + E2E шифрование загружено", "color:#facc15; font-weight:bold");
 });
