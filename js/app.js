@@ -1,12 +1,12 @@
-// Web3 Messenger - App Logic v7.9 + E2E Encryption (tweetnacl)
+// Web3 Messenger - App Logic v7.9.1 + E2E Encryption (tweetnacl, fixed caching)
 // ✅ Auto-refresh current chat every 10s (no flicker)
 // ✅ Instant discovery of new conversations when message arrives
 // ✅ Persistent chat deletion
-// ✅ E2E encryption with tweetnacl (deterministic shared key)
+// ✅ E2E encryption with tweetnacl (deterministic shared key, cached)
 // ✅ User avatar menu with profile, contacts, settings, logout
 // ✅ Smooth account change handling
 
-console.log('🚀 Web3 Messenger v7.9 + E2E (tweetnacl) loaded');
+console.log('🚀 Web3 Messenger v7.9.1 + E2E (cached keys) loaded');
 
 if (typeof ethers === 'undefined') {
     console.error('❌ ethers.js не загружен! Проверьте CDN в index.html');
@@ -108,23 +108,38 @@ let lastRenderedMessagesHash = '';
 let lastRenderedChatListHash = '';
 
 // ────────────────────────────────────────────────────────────────────────────
-// E2E ШИФРОВАНИЕ (tweetnacl) – ДЕТЕРМИНИРОВАННЫЙ ОБЩИЙ КЛЮЧ
+// E2E ШИФРОВАНИЕ (tweetnacl) – ДЕТЕРМИНИРОВАННЫЙ ОБЩИЙ КЛЮЧ С КЭШИРОВАНИЕМ
 // ────────────────────────────────────────────────────────────────────────────
+
+// Кэш ключей: ключ — строка "user:recipient", значение — Uint8Array ключа
+const sharedKeyCache = new Map();
 
 /**
  * Генерирует общий 32-байтный ключ для пары (userAddress, recipient).
- * Использует сортировку адресов и подпись MetaMask.
+ * Использует сортировку адресов и подпись MetaMask. Результат кэшируется.
  */
 async function getSharedKey(recipient) {
     if (!signer) throw new Error('Signer not available');
-    const addresses = [userAddress.toLowerCase(), recipient.toLowerCase()].sort();
-    const sortedPair = addresses.join(':');
-    const messageToSign = `chat-key-v1:${sortedPair}`;
     
+    const addresses = [userAddress.toLowerCase(), recipient.toLowerCase()].sort();
+    const cacheKey = addresses.join(':');
+    
+    // Проверяем кэш
+    if (sharedKeyCache.has(cacheKey)) {
+        console.log('🔑 Ключ взят из кэша для', cacheKey);
+        return sharedKeyCache.get(cacheKey);
+    }
+    
+    const messageToSign = `chat-key-v1:${cacheKey}`;
+    console.log('🔐 Запрос подписи для ключа...');
     const signature = await signer.signMessage(messageToSign);
-    // ethers v5: keccak256 возвращает hex строку, arrayify -> Uint8Array (32 байта)
     const hash = ethers.utils.keccak256(signature);
-    return ethers.utils.arrayify(hash);
+    const key = ethers.utils.arrayify(hash);
+    
+    // Сохраняем в кэш
+    sharedKeyCache.set(cacheKey, key);
+    console.log('✅ Ключ сгенерирован и закэширован для', cacheKey);
+    return key;
 }
 
 /**
@@ -161,34 +176,32 @@ function isValidBase64(str) {
 }
 
 /**
- * Расшифровывает base64 строку от отправителя sender.
- * Возвращает исходный текст или исходную строку, если расшифровка не удалась.
+ * Расшифровывает base64 строку от отправителя sender, используя переданный ключ (опционально).
+ * Если ключ не передан, получает его самостоятельно.
  */
-async function decrypt(encryptedBase64, sender) {
-    // Если это невалидная base64, сразу возвращаем как есть (plaintext)
+async function decryptWithKey(encryptedBase64, key) {
     if (!isValidBase64(encryptedBase64)) {
         return encryptedBase64;
     }
-    
     try {
-        const key = await getSharedKey(sender);
         const combined = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
-        
         const nonce = combined.slice(0, nacl.secretbox.nonceLength);
         const box = combined.slice(nacl.secretbox.nonceLength);
-        
         const decrypted = nacl.secretbox.open(box, nonce, key);
-        
         if (decrypted) {
-            const text = new TextDecoder().decode(decrypted);
-            console.log('🔓 Сообщение расшифровано');
-            return text;
-        } else {
-            console.warn('⚠️ Не удалось расшифровать сообщение (неверный ключ?)');
-            return encryptedBase64;
+            return new TextDecoder().decode(decrypted);
         }
     } catch (e) {
-        console.warn('Decryption error, returning as is:', e.message);
+        console.warn('Decryption error:', e.message);
+    }
+    return encryptedBase64;
+}
+
+async function decrypt(encryptedBase64, sender) {
+    try {
+        const key = await getSharedKey(sender);
+        return await decryptWithKey(encryptedBase64, key);
+    } catch (e) {
         return encryptedBase64;
     }
 }
@@ -416,7 +429,7 @@ async function sendMessage() {
     input.placeholder = '✍️ Шифрование...';
 
     try {
-        // Шифруем текст
+        // Шифруем текст (ключ будет закэширован)
         const encryptedText = await encrypt(plaintext, recipient);
         console.log('🔒 Сообщение зашифровано');
         
@@ -429,7 +442,7 @@ async function sendMessage() {
         showToast('📤 Транзакция отправлена. Ожидайте...', 'info');
         await tx.wait();
 
-        // Добавляем отправленное сообщение локально (храним зашифрованное, но для UI расшифруем потом)
+        // Добавляем отправленное сообщение локально
         const newMsg = {
             id: Date.now().toString() + userAddress,
             text: encryptedText,
@@ -463,7 +476,7 @@ async function sendMessage() {
     }
 }
 
-// ─── Загрузка сообщений (с расшифровкой, где возможно) ────────────────────────
+// ─── Загрузка сообщений (с расшифровкой с использованием кэшированного ключа) ───
 async function loadMessagesForChat(chatId) {
     if (!signer || !userAddress) return;
 
@@ -471,6 +484,9 @@ async function loadMessagesForChat(chatId) {
     if (!counterparty) return;
 
     try {
+        // Заранее получаем ключ для этого чата (кэшируется)
+        const sharedKey = await getSharedKey(counterparty);
+        
         const msgContract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
         const [sent, received] = await msgContract.getConversation(userAddress, counterparty, 0, 50);
 
@@ -503,9 +519,10 @@ async function loadMessagesForChat(chatId) {
             const isSentByMe = m.sender.toLowerCase() === userAddress.toLowerCase();
             let displayText = m.text;
             
-            // Пытаемся расшифровать любое сообщение
+            // Пытаемся расшифровать с уже готовым ключом
             try {
-                displayText = await decrypt(m.text, m.sender);
+                const decrypted = await decryptWithKey(m.text, sharedKey);
+                if (decrypted !== m.text) displayText = decrypted;
             } catch (e) {
                 // оставляем m.text
             }
@@ -757,9 +774,6 @@ async function verifySignature(msgId) {
     if (!msg || !msg.signature) return;
 
     try {
-        // Для зашифрованных сообщений подпись была сделана по открытому тексту, которого у нас нет.
-        // Поэтому верификация подписи для входящих зашифрованных сообщений не сработает.
-        // Оставляем как есть, будет показывать ошибку.
         const recovered = ethers.utils.verifyMessage(msg.text, msg.signature);
         if (recovered.toLowerCase() === msg.sender.toLowerCase()) {
             showToast('✅ Подпись верна! Отправитель подтверждён.', 'success');
@@ -861,6 +875,7 @@ function logout() {
     if (confirm('Выйти из аккаунта?')) {
         userAddress = null;
         signer = null;
+        sharedKeyCache.clear(); // Очищаем кэш ключей при выходе
         updateAvatarMenu();
         updateInputState();
         renderEmptyState();
@@ -898,6 +913,7 @@ function setupEventListeners() {
             if (accounts.length === 0) {
                 userAddress = null;
                 signer = null;
+                sharedKeyCache.clear();
                 updateAvatarMenu();
                 updateInputState();
                 showToast('Кошелёк отключён', 'info');
