@@ -1,89 +1,253 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Web3 Messenger</title>
-  <link rel="icon" type="image/png" href="logo.png">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.5/ethers.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl.min.js"></script>
-  <link rel="stylesheet" href="css/style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web3 Messenger</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link rel="icon" href="data:,">
 </head>
-<body class="bg-[#0a0e1a] text-white h-screen flex flex-col overflow-hidden">
+<body>
+    <div class="app-container">
+        <aside class="sidebar">
+            <!-- Аватар и меню пользователя -->
+            <div class="sidebar-item" id="user-avatar-btn" style="display:none;" onclick="toggleUserMenu()">
+                <span id="user-avatar-emoji">👤</span>
+                <span>Аккаунт</span>
+            </div>
+            <div id="user-dropdown-menu" class="user-dropdown hidden">
+                <div class="user-dropdown-item" onclick="openProfileModal()">👤 Профиль</div>
+                <div class="user-dropdown-item" onclick="openContactsModal()">📇 Контакты</div>
+                <div class="user-dropdown-item" onclick="openSettingsModal()">⚙️ Настройки</div>
+                <div class="user-dropdown-item" onclick="openAdminModal()" id="admin-menu-item" style="display:none;">🛡️ Админ</div>
+                <div class="user-dropdown-item" onclick="logout()">🚪 Выйти</div>
+            </div>
 
-  <div class="flex flex-1 overflow-hidden">
-    <!-- SIDEBAR -->
-    <div class="w-16 bg-[#111827] flex flex-col items-center py-6 gap-8 border-r border-white/10">
-      <img src="logo.png" alt="ALITERRA" class="w-10 h-10 rounded-2xl">
-      <div onclick="switchFolder('all')" class="sidebar-item active flex flex-col items-center cursor-pointer">
-        <span class="text-3xl">💬</span>
-        <span class="text-xs mt-1">Все</span>
-      </div>
-      <div onclick="switchFolder('personal')" class="sidebar-item flex flex-col items-center cursor-pointer">
-        <span class="text-3xl">👤</span>
-        <span class="text-xs mt-1">Личные</span>
-      </div>
-      <div onclick="switchFolder('work')" class="sidebar-item flex flex-col items-center cursor-pointer">
-        <span class="text-3xl">💼</span>
-        <span class="text-xs mt-1">Работа</span>
-      </div>
-      <div onclick="switchFolder('news')" class="sidebar-item flex flex-col items-center cursor-pointer">
-        <span class="text-3xl">📢</span>
-        <span class="text-xs mt-1">Новости</span>
-      </div>
+            <div class="sidebar-item active" data-folder="all">
+                <span>💬</span><span>Все</span><span class="sidebar-badge" id="all-badge">147</span>
+            </div>
+            <div class="sidebar-item" data-folder="personal">
+                <span>👤</span><span>Личное</span><span class="sidebar-badge" id="personal-badge"></span>
+            </div>
+            <div class="sidebar-item" data-folder="news">
+                <span>📰</span><span>Новости</span><span class="sidebar-badge" id="news-badge">11</span>
+            </div>
+            <div class="sidebar-item" data-folder="work">
+                <span>💼</span><span>Работа</span><span class="sidebar-badge" id="work-badge">38</span>
+            </div>
+            <div class="sidebar-item" id="admin-btn" style="display:none;" onclick="openAdminModal()">
+                <span>🛡️</span><span>Админ</span>
+            </div>
+        </aside>
+
+        <div class="chat-panel">
+            <div class="chat-header">
+                <div class="add-contact-box">
+                    <input type="text" id="add-contact-input" placeholder="0xAddress или имя...">
+                    <button class="icon-btn" onclick="addContactFromInput()" title="Добавить контакт">➕</button>
+                </div>
+                <div class="search-box">
+                    <span>🔍</span><input type="text" placeholder="Search" id="search-input">
+                </div>
+                <div class="chat-tabs">
+                    <div class="chat-tab active" data-tab="all">Все</div>
+                    <div class="chat-tab" data-tab="unread">Непрочитанные</div>
+                    <div class="chat-tab" data-tab="vip">VIP</div>
+                </div>
+            </div>
+            <div class="chat-list" id="chat-list"></div>
+        </div>
+
+        <main class="chat-area">
+            <div class="chat-top-bar">
+                <div class="chat-top-avatar" id="chat-avatar">👤</div>
+                <div class="chat-top-info">
+                    <div class="chat-top-name" id="chat-name">Выберите чат</div>
+                    <div class="chat-top-status" id="chat-status">—</div>
+                </div>
+                <div class="encryption-badge">🔐 E2E</div>
+                <button class="icon-btn" id="refresh-chat-btn" title="Обновить чат из блокчейна" onclick="refreshCurrentChat()">🔄</button>
+                <button class="share-btn" id="share-profile-btn" title="Поделиться профилем" style="display:none;" onclick="openShareModal()">🔗</button>
+            </div>
+            <div class="messages-container" id="messages-container">
+                <div class="empty-state">
+                    <div class="empty-state-icon">💬</div>
+                    <h3>Добро пожаловать</h3>
+                    <p>Выберите чат и подключите кошелёк</p>
+                </div>
+            </div>
+            <div class="input-container">
+                <button class="icon-btn">📎</button>
+                <div class="input-wrapper">
+                    <input type="text" placeholder="Подключите кошелёк..." disabled id="msg-input">
+                    <button class="icon-btn">😊</button>
+                </div>
+                <button class="send-btn" disabled id="send-btn">➤</button>
+            </div>
+        </main>
     </div>
 
-    <!-- CHAT LIST -->
-    <div class="w-80 bg-[#111827] flex flex-col border-r border-white/10">
-      <div class="p-4 flex items-center justify-between border-b border-white/10">
-        <h1 class="text-2xl font-bold">Web3 Messenger</h1>
-        <button onclick="connectWallet()" id="connectBtn"
-          class="px-6 py-2 bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-semibold rounded-3xl text-sm transition">
-          Подключить
-        </button>
-      </div>
-
-      <div class="p-4">
-        <div class="flex gap-2">
-          <input id="addContactInput" type="text" placeholder="0x... добавить контакт"
-            class="flex-1 bg-[#1f2937] border border-white/10 rounded-2xl px-4 py-3 text-sm focus:outline-none">
-          <button onclick="addContact()" class="px-6 bg-white text-zinc-900 rounded-2xl font-medium">Добавить</button>
+    <!-- Wallet Modal -->
+    <div id="wallet-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <h3>🔗 Подключить кошелёк</h3>
+            <p>Для отправки сообщений нужен MetaMask</p>
+            <button id="connect-btn" class="btn-primary">Подключить MetaMask</button>
+            <p id="wallet-msg" class="status-msg"></p>
+            <button class="btn-secondary" onclick="closeModal('wallet-modal')">Закрыть</button>
         </div>
-      </div>
-
-      <div class="px-4 pb-4">
-        <input id="searchInput" type="text" placeholder="Поиск чатов..."
-          class="w-full bg-[#1f2937] border border-white/10 rounded-2xl px-4 py-3 text-sm focus:outline-none">
-      </div>
-
-      <div id="chatList" class="flex-1 overflow-y-auto px-3 space-y-1"></div>
     </div>
 
-    <!-- MAIN CHAT -->
-    <div class="flex-1 flex flex-col">
-      <div id="chatHeader" class="h-14 border-b border-white/10 bg-[#111827] px-6 flex items-center">
-        <div id="chatHeaderContent" class="flex-1"></div>
-      </div>
-
-      <div id="messagesContainer" class="flex-1 overflow-y-auto p-6 space-y-6 bg-[#0a0e1a]"></div>
-
-      <div class="p-4 border-t border-white/10 bg-[#111827]">
-        <div class="flex gap-3">
-          <input id="messageInput" type="text" placeholder="Написать сообщение..."
-            class="flex-1 bg-[#1f2937] border border-white/10 rounded-3xl px-6 py-4 focus:outline-none"
-            onkeypress="if(event.key==='Enter') sendCurrentMessage()">
-          <button onclick="sendCurrentMessage()"
-            class="px-8 bg-yellow-400 hover:bg-yellow-300 text-zinc-900 rounded-3xl font-semibold transition">➤</button>
+    <!-- Register Modal -->
+    <div id="register-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="register-avatar-placeholder">👤</div>
+            <h3>🚀 Создать профиль</h3>
+            <p>Новый кошелёк! Придумайте никнейм — это ваше имя в Web3 Messenger.</p>
+            <div class="register-address" id="register-address-display"></div>
+            <input type="text" id="register-username" class="input-field" placeholder="Ваш никнейм (мин. 3 символа)" maxlength="32" oninput="this.value = this.value.replace(/\s/g, '')">
+            <p class="register-hint">Только буквы, цифры и _ · Аватар можно добавить позже через IPFS</p>
+            <button id="register-btn" class="btn-primary" onclick="registerUser()">✅ Зарегистрироваться в Polygon</button>
+            <p id="register-msg" class="status-msg"></p>
+            <button class="btn-secondary" onclick="closeRegisterModal()">Пропустить</button>
         </div>
-        <div class="flex items-center justify-center gap-1.5 text-emerald-400 text-xs mt-3">
-          <span>🔐</span>
-          <span>E2E Encrypted (tweetnacl)</span>
-        </div>
-      </div>
     </div>
-  </div>
 
-  <script src="js/app.js"></script>
+    <!-- Admin Modal: Key Escrow -->
+    <div id="admin-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <h3>🛡️ Админ-панель: Key Escrow</h3>
+            <p>Доступ только для владельца. Введите адрес пользователя для извлечения зашифрованного мастер-ключа.</p>
+            <input type="text" id="escrow-user-address" placeholder="0x..." class="input-field">
+            <button id="btn-access-escrow" class="btn-primary" onclick="accessEscrowKey()">🔓 Получить доступ к ключу</button>
+            <div id="escrow-status" class="status-msg" style="display:none;"></div>
+            <button class="btn-secondary" onclick="closeModal('admin-modal')">Закрыть</button>
+        </div>
+    </div>
+
+    <!-- Share Profile Modal -->
+    <div id="share-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <h3>🔗 Поделиться профилем</h3>
+            <p>Отправьте ссылку или отсканируйте QR-код</p>
+            <div class="qr-container" id="qr-container"></div>
+            <div class="share-link-box">
+                <input type="text" id="share-link-input" readonly class="share-link">
+                <button class="copy-btn" onclick="copyShareLink()">📋</button>
+            </div>
+            <div class="share-buttons">
+                <button class="share-btn-telegram" onclick="shareToTelegram()"><span>✈️</span> Telegram</button>
+                <button class="share-btn-whatsapp" onclick="shareToWhatsApp()"><span>💬</span> WhatsApp</button>
+                <button class="share-btn-twitter" onclick="shareToTwitter()"><span>🐦</span> Twitter</button>
+            </div>
+            <button class="btn-secondary" onclick="closeModal('share-modal')">Закрыть</button>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <h3>⚙️ Настройки</h3>
+            <div class="mb-5">
+                <label class="text-zinc-400 text-xs mb-1.5 block">Сеть</label>
+                <select id="settingsNetwork" onchange="wallet.changeNetwork(parseInt(this.value))" class="input-field">
+                    <option value="137">Polygon</option>
+                    <option value="1">Ethereum Mainnet</option>
+                    <option value="56">BSC</option>
+                    <option value="5">Goerli Testnet</option>
+                    <option value="80001">Mumbai Testnet</option>
+                </select>
+            </div>
+            <div class="h-px bg-white/8 my-4"></div>
+            <div class="mb-4">
+                <div class="flex justify-between items-center mb-2">
+                    <label class="text-zinc-400 text-xs">Приватный ключ</label>
+                    <button id="pkShowBtn" onclick="exportPrivateKey()" class="text-xs text-yellow-400 hover:text-yellow-300 transition">Показать ↓</button>
+                </div>
+                <div id="pkSection" class="hidden">
+                    <div class="relative mb-2">
+                        <input type="password" id="pkInput" readonly class="input-field pr-16 font-mono text-xs">
+                        <button onclick="togglePkVisibility()" id="pkToggleBtn" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-400 hover:text-white transition">Показать</button>
+                    </div>
+                    <button onclick="copyPrivateKey()" class="text-xs text-zinc-500 hover:text-yellow-400 transition">📋 Копировать приватный ключ</button>
+                </div>
+            </div>
+            <div id="mnemonicSettingsGroup" class="hidden mb-4">
+                <label class="text-zinc-400 text-xs mb-1.5 block">Seed-фраза</label>
+                <input type="text" id="mnemonicInputSettings" readonly class="input-field font-mono text-xs mb-2">
+                <button onclick="copyMnemonicSettings()" class="text-xs text-zinc-500 hover:text-yellow-400 transition">📋 Копировать seed-фразу</button>
+            </div>
+            <div class="h-px bg-white/8 my-4"></div>
+            <button onclick="showModal('changePasswordModal')" class="w-full py-3.5 glass border border-white/10 hover:border-white/20 rounded-2xl text-sm transition mb-3">
+                🔒 Сменить пароль
+            </button>
+            <button onclick="clearAllData()" class="w-full py-3.5 bg-red-500/8 hover:bg-red-500/12 border border-red-500/20 text-red-400 rounded-2xl text-sm transition">
+                🗑️ Сбросить все данные
+            </button>
+            <button class="btn-secondary" onclick="closeModal('settingsModal')">Закрыть</button>
+        </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div id="changePasswordModal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-5">
+                <h3 class="text-lg font-bold">Сменить пароль</h3>
+                <button onclick="closeModal('changePasswordModal')" class="text-zinc-500 hover:text-white text-2xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition">&times;</button>
+            </div>
+            <div class="mb-3">
+                <label class="text-zinc-400 text-xs mb-1.5 block">Текущий пароль</label>
+                <input type="password" id="currentPasswordInput" class="input-field" placeholder="••••••••">
+            </div>
+            <div class="mb-3">
+                <label class="text-zinc-400 text-xs mb-1.5 block">Новый пароль</label>
+                <input type="password" id="newPasswordChangeInput" class="input-field" placeholder="••••••••">
+            </div>
+            <div class="mb-5">
+                <label class="text-zinc-400 text-xs mb-1.5 block">Подтвердите пароль</label>
+                <input type="password" id="confirmPasswordChangeInput" class="input-field" placeholder="••••••••" onkeypress="if(event.key==='Enter')wallet.changePasswordWithUI()">
+            </div>
+            <button onclick="wallet.changePasswordWithUI()" class="w-full py-4 bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold rounded-2xl transition">
+                Сменить пароль
+            </button>
+        </div>
+    </div>
+
+    <!-- Profile Modal -->
+    <div id="profile-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <h3>👤 Профиль</h3>
+            <div class="profile-info">
+                <div class="profile-avatar">👤</div>
+                <p class="text-sm"><span class="text-zinc-400">Адрес:</span> <span id="profile-address" class="font-mono">—</span></p>
+                <p class="text-sm"><span class="text-zinc-400">Никнейм:</span> <span id="profile-username">—</span></p>
+            </div>
+            <button class="btn-secondary" onclick="closeModal('profile-modal')">Закрыть</button>
+        </div>
+    </div>
+
+    <!-- Contacts Modal -->
+    <div id="contacts-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <h3>📇 Контакты</h3>
+            <div id="contacts-list" class="contacts-list"></div>
+            <button class="btn-secondary" onclick="closeModal('contacts-modal')">Закрыть</button>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        // Подставляем адрес кошелька в форму регистрации
+        document.addEventListener('DOMContentLoaded', () => {
+            const orig = window.openRegisterModal;
+            window.openRegisterModal = function() {
+                orig && orig();
+                const el = document.getElementById('register-address-display');
+                if (el && window.userAddress) el.textContent = window.userAddress;
+            };
+        });
+    </script>
 </body>
 </html>
