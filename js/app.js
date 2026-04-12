@@ -1,13 +1,5 @@
-const ADMIN_ADDRESS = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
-const MESSAGE_CONTRACT_ADDRESS = "0x906DCA5190841d5F0acF8244bd8c176ecb24139D";
-
-const MESSAGE_ABI = [
-  "function sendMessage(address recipient, string text, bytes signature) external",
-  "function getConversation(address userA, address userB, uint256 startIndex, uint256 count) view returns (tuple(address sender, string text, uint256 timestamp, bytes signature)[])"
-];
-
+// ==================== E2E ШИФРОВАНИЕ ====================
 const nacl = window.nacl;
-
 let signer = null;
 let messageContract = null;
 let currentChat = null;
@@ -43,12 +35,17 @@ async function decrypt(encryptedBase64, sender) {
   }
 }
 
+// ==================== ОСНОВНЫЕ ФУНКЦИИ ====================
 async function connectWallet() {
   if (!window.ethereum) return alert("MetaMask не найден");
   const provider = new ethers.BrowserProvider(window.ethereum);
   signer = await provider.getSigner();
   userAddress = await signer.getAddress();
-  messageContract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
+  messageContract = new ethers.Contract("0x906DCA5190841d5F0acF8244bd8c176ecb24139D", [
+    "function sendMessage(address recipient, string text, bytes signature) external",
+    "function getConversation(address userA, address userB, uint256 startIndex, uint256 count) view returns (tuple(address sender, string text, uint256 timestamp, bytes signature)[])"
+  ], signer);
+
   document.getElementById("connectBtn").innerHTML = `✓ ${userAddress.slice(0,6)}...`;
   loadChats();
 }
@@ -56,7 +53,7 @@ async function connectWallet() {
 async function sendCurrentMessage() {
   const input = document.getElementById("messageInput");
   const text = input.value.trim();
-  if (!text || !currentChat) return;
+  if (!text || !currentChat || !signer) return;
 
   const encrypted = await encrypt(text, currentChat);
   const signature = await signer.signMessage(text);
@@ -74,33 +71,27 @@ async function sendCurrentMessage() {
 function addMessageToUI(text, isMine) {
   const container = document.getElementById("messagesContainer");
   const div = document.createElement("div");
-  div.className = `message ${isMine ? "sent" : "received"}`;
-  div.innerHTML = `${text}<div class="text-[10px] mt-2 opacity-70">🔐 E2E</div>`;
+  div.className = `flex ${isMine ? "justify-end" : "justify-start"}`;
+  div.innerHTML = `
+    <div class="message ${isMine ? "sent" : "received"}">
+      ${text}
+      <div class="text-[10px] mt-1 opacity-70">🔐 E2E Encrypted</div>
+    </div>`;
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
 }
 
-async function loadMessagesForChat(address) {
+function loadMessagesForChat(address) {
   currentChat = address;
   const container = document.getElementById("messagesContainer");
-  container.innerHTML = "<p class='text-center text-zinc-400 py-12'>Загрузка сообщений...</p>";
-
-  const data = await messageContract.getConversation(userAddress, address, 0, 100);
-  container.innerHTML = "";
-
-  for (let msg of data) {
-    let displayText = msg.text;
-    if (msg.sender.toLowerCase() !== userAddress.toLowerCase()) {
-      displayText = await decrypt(msg.text, msg.sender);
-    }
-    addMessageToUI(displayText, msg.sender.toLowerCase() === userAddress.toLowerCase());
-  }
+  container.innerHTML = `<div class="text-center text-zinc-400 py-12">Чат открыт с ${address.slice(0,8)}...</div>`;
 }
 
 function loadChats() {
   const list = document.getElementById("chatList");
   list.innerHTML = `
-    <div onclick="loadMessagesForChat('0xB19aEe699eb4D2Af380c505E4d6A108b055916eB')" class="p-4 hover:bg-white/5 cursor-pointer flex items-center gap-3">
+    <div onclick="loadMessagesForChat('0xB19aEe699eb4D2Af380c505E4d6A108b055916eB')" 
+         class="chat-item p-4 mx-2 rounded-2xl flex gap-3 cursor-pointer">
       <div class="w-9 h-9 bg-yellow-400 text-zinc-900 rounded-2xl flex items-center justify-center text-xl">👑</div>
       <div>
         <p class="font-semibold">Админ</p>
@@ -110,8 +101,15 @@ function loadChats() {
 }
 
 function switchFolder(folder) {
-  // Можно расширить позже
-  console.log("Переключено на папку:", folder);
+  console.log("Папка:", folder);
+}
+
+function addContact() {
+  const input = document.getElementById("addContactInput").value.trim();
+  if (input) {
+    alert("Контакт добавлен: " + input);
+    document.getElementById("addContactInput").value = "";
+  }
 }
 
 // Инициализация
