@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web3 Messenger</title>
     <link rel="stylesheet" href="css/style.css">
+    <!-- ethers v5 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <!-- tweetnacl для E2E шифрования -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <link rel="icon" href="data:,">
 </head>
@@ -86,10 +89,12 @@
                 </div>
                 <button class="send-btn" disabled id="send-btn">➤</button>
             </div>
+            <!-- Индикатор E2E -->
+            <div id="e2e-indicator" class="e2e-indicator">🔒 E2E Encrypted (tweetnacl)</div>
         </main>
     </div>
 
-    <!-- Wallet Modal -->
+    <!-- Модальные окна (без изменений) -->
     <div id="wallet-modal" class="modal" style="display:none;">
         <div class="modal-content">
             <h3>🔗 Подключить кошелёк</h3>
@@ -100,7 +105,6 @@
         </div>
     </div>
 
-    <!-- Register Modal -->
     <div id="register-modal" class="modal" style="display:none;">
         <div class="modal-content">
             <div class="register-avatar-placeholder">👤</div>
@@ -115,7 +119,6 @@
         </div>
     </div>
 
-    <!-- Admin Modal: Key Escrow -->
     <div id="admin-modal" class="modal" style="display:none;">
         <div class="modal-content">
             <h3>🛡️ Админ-панель: Key Escrow</h3>
@@ -127,7 +130,6 @@
         </div>
     </div>
 
-    <!-- Share Profile Modal -->
     <div id="share-modal" class="modal" style="display:none;">
         <div class="modal-content">
             <h3>🔗 Поделиться профилем</h3>
@@ -146,7 +148,6 @@
         </div>
     </div>
 
-    <!-- Settings Modal -->
     <div id="settingsModal" class="modal" style="display:none;">
         <div class="modal-content">
             <h3>⚙️ Настройки</h3>
@@ -190,7 +191,6 @@
         </div>
     </div>
 
-    <!-- Change Password Modal -->
     <div id="changePasswordModal" class="modal" style="display:none;">
         <div class="modal-content">
             <div class="flex justify-between items-center mb-5">
@@ -215,7 +215,6 @@
         </div>
     </div>
 
-    <!-- Profile Modal -->
     <div id="profile-modal" class="modal" style="display:none;">
         <div class="modal-content">
             <h3>👤 Профиль</h3>
@@ -228,7 +227,6 @@
         </div>
     </div>
 
-    <!-- Contacts Modal -->
     <div id="contacts-modal" class="modal" style="display:none;">
         <div class="modal-content">
             <h3>📇 Контакты</h3>
@@ -239,7 +237,6 @@
 
     <script src="js/app.js"></script>
     <script>
-        // Подставляем адрес кошелька в форму регистрации
         document.addEventListener('DOMContentLoaded', () => {
             const orig = window.openRegisterModal;
             window.openRegisterModal = function() {
