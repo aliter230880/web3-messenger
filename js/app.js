@@ -1,1119 +1,772 @@
-// Web3 Messenger - App Logic v7.9.1 + E2E Encryption (tweetnacl, fixed caching)
-// ✅ Auto-refresh current chat every 10s (no flicker)
-// ✅ Instant discovery of new conversations when message arrives
-// ✅ Persistent chat deletion
-// ✅ E2E encryption with tweetnacl (deterministic shared key, cached)
-// ✅ User avatar menu with profile, contacts, settings, logout
-// ✅ Smooth account change handling
+// Web3 Messenger v8.1 — Telegram/WhatsApp UI + AES-256-GCM
+console.log('🚀 Web3 Messenger v8.1 (Telegram UI)');
 
-console.log('🚀 Web3 Messenger v7.9.1 + E2E (cached keys) loaded');
+// ─── Constants ────────────────────────────────────────────────────────────────
+const ADMIN_ADDRESS             = '0xB19aEe699eb4D2Af380c505E4d6A108b055916eB';
+const IDENTITY_CONTRACT_ADDRESS = '0xcFcA16C8c38a83a71936395039757DcFF6040c1E';
+const MESSAGE_CONTRACT_ADDRESS  = '0x906DCA5190841d5F0acF8244bd8c176ecb24139D';
 
-if (typeof ethers === 'undefined') {
-    console.error('❌ ethers.js не загружен! Проверьте CDN в index.html');
-}
-if (typeof nacl === 'undefined') {
-    console.error('❌ tweetnacl не загружен! Проверьте CDN в index.html');
-}
-
-// ─── Глобальные переменные ──────────────────────────────────────────────────
-let provider, signer, userAddress;
-let isAdmin = false;
-let currentUsername = '';
-const ADMIN_ADDRESS    = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
-const IDENTITY_CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
-const MESSAGE_CONTRACT_ADDRESS = "0x906DCA5190841d5F0acF8244bd8c176ecb24139D";
-const BASE_URL = window.location.origin + '/';
-
-// ABI MessageStorage
 const MESSAGE_ABI = [
-    "function sendMessage(address recipient, string text, bytes signature) external",
-    "function getMessages(address sender, address recipient, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[])",
-    "function getConversation(address userA, address userB, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[] sent, tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[] received)",
-    "function messageCount(address, address) view returns (uint256)"
+  'function sendMessage(address recipient, string text, bytes signature) external',
+  'function getConversation(address userA, address userB, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[] sent, tuple(address sender, address recipient, string text, bytes signature, uint256 timestamp)[] received)',
+  'function messageCount(address, address) view returns (uint256)',
+];
+const IDENTITY_ABI = [
+  'function getProfile(address) view returns (string,string,string,uint256,bool)',
+  'function isRegistered(address) view returns (bool)',
+  'function registerProfile(string username, string avatarCID, string bio) external',
 ];
 
-// ─── Хранилище контактов ────────────────────────────────────────────────────
+// ─── Avatar helpers (Telegram-style colored circles) ──────────────────────────
+const AVATAR_COLORS = [
+  '#E17076','#7BC862','#65AADD','#A695E7',
+  '#EE7AAE','#6EC9CB','#F5A623','#44BEC7',
+];
+function _colorFor(str) {
+  let h = 0;
+  for (const c of str) h = (h << 5) - h + c.charCodeAt(0);
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
+}
+function _initials(name) {
+  if (!name) return '?';
+  const words = name.trim().split(/\s+/);
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+// Returns { bg, label } — label may be emoji or initials
+function avatarFor(chat) {
+  // If name is a short emoji string, show emoji directly
+  if (/^\p{Emoji}/u.test(chat.avatar || '') && (chat.avatar || '').length <= 4) {
+    return { bg: _colorFor(chat.id), label: chat.avatar, isEmoji: true };
+  }
+  const name = chat.name || chat.id;
+  return { bg: _colorFor(chat.id || name), label: _initials(name), isEmoji: false };
+}
+function avatarEl(chat, size = 46) {
+  const { bg, label } = avatarFor(chat);
+  const div = document.createElement('div');
+  div.className = 'chat-avatar' + (chat.online ? ' online' : '');
+  div.style.cssText = `width:${size}px;height:${size}px;background:${bg};font-size:${size <= 36 ? 13 : 17}px`;
+  div.textContent = label;
+  return div;
+}
+
+// ─── Encryption (AES-256-GCM) ─────────────────────────────────────────────────
+const ENC_PREFIX = 'ENC1:';
+const _keyCache = new Map();
+
+async function _deriveKey(a, b) {
+  const [lo, hi] = [a.toLowerCase(), b.toLowerCase()].sort();
+  const raw = new TextEncoder().encode(`web3messenger:${lo}:${hi}:aes-gcm-v1`);
+  const hash = await crypto.subtle.digest('SHA-256', raw);
+  return crypto.subtle.importKey('raw', hash, { name:'AES-GCM' }, false, ['encrypt','decrypt']);
+}
+async function _getKey(a, b) {
+  const k = [a,b].map(x=>x.toLowerCase()).sort().join(':');
+  if (!_keyCache.has(k)) _keyCache.set(k, await _deriveKey(a, b));
+  return _keyCache.get(k);
+}
+async function encryptMsg(text, me, peer) {
+  const key = await _getKey(me, peer);
+  const iv  = crypto.getRandomValues(new Uint8Array(12));
+  const ct  = await crypto.subtle.encrypt({ name:'AES-GCM', iv }, key, new TextEncoder().encode(text));
+  const buf = new Uint8Array(12 + ct.byteLength);
+  buf.set(iv); buf.set(new Uint8Array(ct), 12);
+  return ENC_PREFIX + btoa(String.fromCharCode(...buf));
+}
+async function decryptMsg(text, me, peer) {
+  if (!text.startsWith(ENC_PREFIX)) return { text, encrypted: false };
+  try {
+    const key  = await _getKey(me, peer);
+    const buf  = Uint8Array.from(atob(text.slice(ENC_PREFIX.length)), c => c.charCodeAt(0));
+    const plain = await crypto.subtle.decrypt({ name:'AES-GCM', iv:buf.slice(0,12) }, key, buf.slice(12));
+    return { text: new TextDecoder().decode(plain), encrypted: true };
+  } catch {
+    return { text:'🔒 [не удалось расшифровать]', encrypted: false };
+  }
+}
+
+// ─── Storage ──────────────────────────────────────────────────────────────────
 const contactsStore = {
-    list: [],
-    load() {
-        try {
-            const saved = localStorage.getItem('web3messenger_contacts');
-            if (saved) this.list = JSON.parse(saved);
-        } catch (e) { console.warn('Contacts load error:', e); }
-    },
-    save() {
-        try {
-            localStorage.setItem('web3messenger_contacts', JSON.stringify(this.list));
-        } catch (e) { console.warn('Contacts save error:', e); }
-    },
-    add(contact) {
-        if (!this.list.find(c => c.address.toLowerCase() === contact.address.toLowerCase())) {
-            this.list.push(contact);
-            this.save();
-            return true;
-        }
-        return false;
-    },
-    remove(address) {
-        const index = this.list.findIndex(c => c.address.toLowerCase() === address.toLowerCase());
-        if (index !== -1) {
-            this.list.splice(index, 1);
-            this.save();
-            return true;
-        }
-        return false;
-    },
-    get(address) {
-        return this.list.find(c => c.address.toLowerCase() === address.toLowerCase());
-    }
+  list: [],
+  load()  { try { const s = localStorage.getItem('w3m_contacts'); if (s) this.list = JSON.parse(s); } catch {} },
+  save()  { try { localStorage.setItem('w3m_contacts', JSON.stringify(this.list)); } catch {} },
+  add(c)  { if (!this.list.find(x=>x.address.toLowerCase()===c.address.toLowerCase())) { this.list.push(c); this.save(); return true; } return false; },
+  remove(addr) { const i=this.list.findIndex(x=>x.address.toLowerCase()===addr.toLowerCase()); if(i!==-1){this.list.splice(i,1);this.save();return true;} return false; },
+  get(addr)    { return this.list.find(x=>x.address.toLowerCase()===addr.toLowerCase()); },
 };
-
-// ─── Управление удалёнными чатами ────────────────────────────────────────────
 const deletedChatsStore = {
-    set: new Set(),
-    load() {
-        try {
-            const saved = localStorage.getItem('web3messenger_deleted_chats');
-            if (saved) this.set = new Set(JSON.parse(saved));
-        } catch (e) { console.warn('Deleted chats load error:', e); }
-    },
-    save() {
-        try {
-            localStorage.setItem('web3messenger_deleted_chats', JSON.stringify([...this.set]));
-        } catch (e) { console.warn('Deleted chats save error:', e); }
-    },
-    add(id) { this.set.add(id); this.save(); },
-    has(id) { return this.set.has(id); },
-    delete(id) { const r = this.set.delete(id); this.save(); return r; }
+  set: new Set(),
+  load() { try { const s=localStorage.getItem('w3m_deleted'); if(s) this.set=new Set(JSON.parse(s)); } catch {} },
+  save() { try { localStorage.setItem('w3m_deleted',JSON.stringify([...this.set])); } catch {} },
+  add(id) { this.set.add(id); this.save(); },
+  has(id) { return this.set.has(id); },
+  del(id) { const r=this.set.delete(id); this.save(); return r; },
 };
 
-// ─── Данные чатов ───────────────────────────────────────────────────────────
+// ─── State ────────────────────────────────────────────────────────────────────
+let provider, signer, userAddress;
+let isAdmin = false, currentUsername = '', isInitializing = false;
+let autoRefreshInterval = null, discoveryInterval = null;
+
 const store = {
-    currentChat: null,
-    currentFolder: 'all',
-    chats: [
-        { id: 'dima', name: 'Дима', avatar: '👤', online: true, folder: 'personal', unread: 0, messages: [] },
-        { id: 'ai', name: 'AI Assistant', avatar: '🤖', online: true, folder: 'work', unread: 0, messages: [] },
-        { id: 'crypto', name: 'Crypto News', avatar: '📢', online: false, folder: 'news', unread: 0, messages: [] },
-    ],
-    messageCache: {}
+  currentChat:   null,
+  currentFolder: 'all',
+  currentTab:    'all',
+  chats: [
+    { id:'dima',   name:'Дима',         avatar:'👤', online:true,  folder:'personal', unread:0, messages:[], preview:'Напишите первое сообщение' },
+    { id:'ai',     name:'AI Assistant', avatar:'🤖', online:true,  folder:'work',     unread:0, messages:[], preview:'Напишите первое сообщение' },
+    { id:'crypto', name:'Crypto News',  avatar:'📢', online:false, folder:'news',     unread:0, messages:[], preview:'Напишите первое сообщение' },
+  ],
 };
 
-let isInitializing = false;
-let autoRefreshInterval = null;
-let discoveryInterval = null;
-
-// Для предотвращения моргания — кэш последнего рендера
-let lastRenderedMessagesHash = '';
-let lastRenderedChatListHash = '';
-
-// ────────────────────────────────────────────────────────────────────────────
-// E2E ШИФРОВАНИЕ (tweetnacl) – ДЕТЕРМИНИРОВАННЫЙ ОБЩИЙ КЛЮЧ С КЭШИРОВАНИЕМ
-// ────────────────────────────────────────────────────────────────────────────
-
-// Кэш ключей: ключ — строка "user:recipient", значение — Uint8Array ключа
-const sharedKeyCache = new Map();
-
-/**
- * Генерирует общий 32-байтный ключ для пары (userAddress, recipient).
- * Использует сортировку адресов и подпись MetaMask. Результат кэшируется.
- */
-async function getSharedKey(recipient) {
-    if (!signer) throw new Error('Signer not available');
-    
-    const addresses = [userAddress.toLowerCase(), recipient.toLowerCase()].sort();
-    const cacheKey = addresses.join(':');
-    
-    // Проверяем кэш
-    if (sharedKeyCache.has(cacheKey)) {
-        console.log('🔑 Ключ взят из кэша для', cacheKey);
-        return sharedKeyCache.get(cacheKey);
+// ─── Init ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  contactsStore.load();
+  deletedChatsStore.load();
+  _syncContactChats();
+  renderChatList();
+  renderWelcome();
+  updateInputState();
+  checkWallet();
+  handleContactParam();
+  document.addEventListener('click', e => {
+    const menu = document.getElementById('user-dropdown-menu');
+    if (menu && !menu.classList.contains('hidden')) {
+      const btn = document.getElementById('user-avatar-btn');
+      if (!btn.contains(e.target) && !menu.contains(e.target)) menu.classList.add('hidden');
     }
-    
-    const messageToSign = `chat-key-v1:${cacheKey}`;
-    console.log('🔐 Запрос подписи для ключа...');
-    const signature = await signer.signMessage(messageToSign);
-    const hash = ethers.utils.keccak256(signature);
-    const key = ethers.utils.arrayify(hash);
-    
-    // Сохраняем в кэш
-    sharedKeyCache.set(cacheKey, key);
-    console.log('✅ Ключ сгенерирован и закэширован для', cacheKey);
-    return key;
-}
-
-/**
- * Шифрует открытый текст для получателя recipient.
- * Возвращает base64 строку, содержащую nonce + ciphertext.
- */
-async function encrypt(text, recipient) {
-    const key = await getSharedKey(recipient);
-    const nonce = nacl.randomBytes(nacl.secretbox.nonceLength); // 24 байта
-    const messageBytes = new TextEncoder().encode(text);
-    
-    const encrypted = nacl.secretbox(messageBytes, nonce, key);
-    
-    // Объединяем nonce и зашифрованные данные
-    const combined = new Uint8Array(nonce.length + encrypted.length);
-    combined.set(nonce);
-    combined.set(encrypted, nonce.length);
-    
-    // В base64
-    return btoa(String.fromCharCode(...combined));
-}
-
-/**
- * Проверяет, является ли строка валидной base64.
- */
-function isValidBase64(str) {
-    if (!str || typeof str !== 'string') return false;
-    try {
-        atob(str);
-        return true;
-    } catch (e) {
-        return false;
-    }
-}
-
-/**
- * Расшифровывает base64 строку от отправителя sender, используя переданный ключ (опционально).
- * Если ключ не передан, получает его самостоятельно.
- */
-async function decryptWithKey(encryptedBase64, key) {
-    if (!isValidBase64(encryptedBase64)) {
-        return encryptedBase64;
-    }
-    try {
-        const combined = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
-        const nonce = combined.slice(0, nacl.secretbox.nonceLength);
-        const box = combined.slice(nacl.secretbox.nonceLength);
-        const decrypted = nacl.secretbox.open(box, nonce, key);
-        if (decrypted) {
-            return new TextDecoder().decode(decrypted);
-        }
-    } catch (e) {
-        console.warn('Decryption error:', e.message);
-    }
-    return encryptedBase64;
-}
-
-async function decrypt(encryptedBase64, sender) {
-    try {
-        const key = await getSharedKey(sender);
-        return await decryptWithKey(encryptedBase64, key);
-    } catch (e) {
-        return encryptedBase64;
-    }
-}
-
-// ─── Инициализация ───────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', async () => {
-    console.log('✅ App initialized');
-    contactsStore.load();
-    deletedChatsStore.load();
-    renderSidebar();
-    renderChatList();
-    setupEventListeners();
-    updateInputState();
-    updateShareButton();
-    checkWallet();
-    handleContactParam();
+  });
 });
 
-// ─── Обработка ?contact= в URL ───────────────────────────────────────────────
 async function handleContactParam() {
-    const params = new URLSearchParams(window.location.search);
-    const contactAddr = params.get('contact');
-    if (contactAddr && ethers.utils.isAddress(contactAddr)) {
-        try {
-            const profile = await getProfileByAddress(contactAddr);
-            if (profile && profile.isActive) {
-                contactsStore.add({ address: contactAddr, ...profile });
-            } else {
-                contactsStore.add({ address: contactAddr });
-            }
-            renderChatList();
-            showStatus('✅ Контакт добавлен!', 'success');
-            history.replaceState({}, document.title, window.location.pathname);
-        } catch (e) { console.warn('Contact param error:', e); }
-    }
+  const addr = new URLSearchParams(window.location.search).get('contact');
+  if (addr && ethers.utils.isAddress(addr)) {
+    const profile = await getProfileByAddress(addr);
+    contactsStore.add(profile?.isActive ? { address:addr, ...profile } : { address:addr });
+    deletedChatsStore.del(addr);
+    _syncContactChats();
+    renderChatList();
+    showToast('✅ Контакт добавлен!', 'success');
+    history.replaceState({}, document.title, window.location.pathname);
+  }
 }
 
-// ─── Получение профиля из контракта Identity ─────────────────────────────────
+// ─── Profile ──────────────────────────────────────────────────────────────────
 async function getProfileByAddress(address) {
-    if (!provider) return null;
-    try {
-        const contract = new ethers.Contract(IDENTITY_CONTRACT_ADDRESS, [
-            "function getProfile(address) view returns (string,string,string,uint256,bool)"
-        ], provider);
-        const result = await contract.getProfile(address);
-        return {
-            username: result[0], avatarCID: result[1], bio: result[2],
-            registeredAt: result[3].toNumber(), isActive: result[4]
-        };
-    } catch (e) { console.warn('Profile fetch error:', e); return null; }
+  if (!provider) return null;
+  try {
+    const c = new ethers.Contract(IDENTITY_CONTRACT_ADDRESS, IDENTITY_ABI, provider);
+    const r = await c.getProfile(address);
+    return { username:r[0], avatarCID:r[1], bio:r[2], registeredAt:r[3].toNumber(), isActive:r[4] };
+  } catch { return null; }
 }
 
-// ─── Кошелёк ────────────────────────────────────────────────────────────────
+// ─── Wallet ───────────────────────────────────────────────────────────────────
 async function checkWallet() {
-    if (typeof window.ethereum === 'undefined') return;
-    try {
-        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-        if (accounts.length > 0) await initWallet();
-    } catch (e) { console.warn('Wallet check:', e); }
+  if (!window.ethereum) return;
+  try { const a = await window.ethereum.request({method:'eth_accounts'}); if (a.length) await initWallet(); } catch {}
 }
 
 async function initWallet() {
-    if (isInitializing) return;
-    isInitializing = true;
-    try {
-        provider    = new ethers.providers.Web3Provider(window.ethereum);
-        signer      = provider.getSigner();
-        userAddress = await signer.getAddress();
-        console.log('✅ Connected:', userAddress);
-
-        isAdmin = userAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
-        updateAdminButton();
-        updateAvatarMenu();
-        updateInputState();
-        updateShareButton();
-        await checkRegistration();
-
-        startAutoRefresh();
-        startDiscovery();
-    } catch (e) {
-        console.error('Init error:', e);
-        showError('wallet-msg', 'Ошибка: ' + e.message);
-    } finally {
-        isInitializing = false;
-    }
+  if (isInitializing) return;
+  isInitializing = true;
+  try {
+    provider    = new ethers.providers.Web3Provider(window.ethereum);
+    signer      = provider.getSigner();
+    userAddress = await signer.getAddress();
+    isAdmin     = userAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
+    updateSidebarAvatar();
+    updateInputState();
+    updateShareButton();
+    await checkRegistration();
+    startAutoRefresh();
+    startDiscovery();
+    // hide wallet button, show avatar
+    const walletBtn = document.getElementById('wallet-btn');
+    if (walletBtn) walletBtn.style.display = 'none';
+  } catch(e) { console.error('initWallet:', e); }
+  finally { isInitializing = false; }
 }
 
 async function connectWallet() {
-    if (!window.ethereum) {
-        showError('wallet-msg', '⚠️ Установите MetaMask');
-        return;
-    }
-    const btn = document.getElementById('connect-btn');
-    const msg = document.getElementById('wallet-msg');
-    try {
-        btn.disabled    = true;
-        msg.textContent = '⏳ Подключение...';
-        msg.className   = 'status-msg info';
-        await window.ethereum.request({ method: 'eth_requestAccounts' });
-        await initWallet();
-        msg.textContent = '✅ Подключено!';
-        msg.className   = 'status-msg success';
-        setTimeout(() => closeModal('wallet-modal'), 800);
-    } catch (e) {
-        console.error('Connect error:', e);
-        msg.textContent = '❌ ' + (e.message || 'Отменено');
-        msg.className   = 'status-msg error';
-        btn.disabled    = false;
-    }
-}
-
-// ─── Регистрация ──────────────────────────────────────────────────────────────
-async function checkRegistration() {
-    if (!provider || !userAddress) return;
-    try {
-        const contract = new ethers.Contract(IDENTITY_CONTRACT_ADDRESS, [
-            "function isRegistered(address) view returns (bool)"
-        ], provider);
-        const registered = await contract.isRegistered(userAddress);
-        if (!registered) {
-            setTimeout(() => openRegisterModal(), 900);
-        } else {
-            const profile = await getProfileByAddress(userAddress);
-            if (profile && profile.username) {
-                currentUsername = profile.username;
-                updateAvatarMenu();
-            }
-        }
-    } catch (e) {
-        console.warn('Registration check skipped:', e.message);
-    }
-}
-
-function openRegisterModal() {
-    const modal = document.getElementById('register-modal');
-    if (!modal) return;
-    const addrEl = document.getElementById('register-address-display');
-    if (addrEl) addrEl.textContent = userAddress || '';
-    modal.style.display = 'flex';
-    document.getElementById('register-username').value = '';
-    const msgEl = document.getElementById('register-msg');
-    msgEl.textContent = '';
-    msgEl.className   = 'status-msg';
-    document.getElementById('register-btn').disabled = false;
-}
-
-function closeRegisterModal() {
-    document.getElementById('register-modal').style.display = 'none';
-}
-
-async function registerUser() {
-    const usernameInput = document.getElementById('register-username');
-    const msgEl         = document.getElementById('register-msg');
-    const btn           = document.getElementById('register-btn');
-    const username      = usernameInput.value.trim();
-
-    if (!username) {
-        msgEl.textContent = '⚠️ Введите никнейм';
-        msgEl.className   = 'status-msg error';
-        return;
-    }
-    if (username.length < 3) {
-        msgEl.textContent = '⚠️ Никнейм минимум 3 символа';
-        msgEl.className   = 'status-msg error';
-        return;
-    }
-    if (!/^[a-zA-Z0-9_а-яёА-ЯЁ]+$/.test(username)) {
-        msgEl.textContent = '⚠️ Только буквы, цифры и знак _';
-        msgEl.className   = 'status-msg error';
-        return;
-    }
-
-    btn.disabled      = true;
-    msgEl.textContent = '⏳ Отправка транзакции...';
-    msgEl.className   = 'status-msg info';
-
-    try {
-        const contract = new ethers.Contract(IDENTITY_CONTRACT_ADDRESS, [
-            "function registerProfile(string username, string avatarCID, string bio) external"
-        ], signer);
-        const tx = await contract.registerProfile(username, '', '');
-
-        msgEl.textContent = '⏳ Ожидание подтверждения в блокчейне...';
-        await tx.wait();
-
-        currentUsername = username;
-        closeRegisterModal();
-        updateAvatarMenu();
-        showToast('✅ Добро пожаловать, ' + username + '! Профиль создан в Polygon.', 'success');
-        console.log('✅ Registered:', username, tx.hash);
-    } catch (e) {
-        console.error('Register error:', e);
-        const errMsg = e.reason || e?.data?.message || e.message || 'Ошибка транзакции';
-        msgEl.textContent = '❌ ' + errMsg;
-        msgEl.className   = 'status-msg error';
-        btn.disabled      = false;
-    }
-}
-
-// ─── Подпись и отправка сообщений (с E2E шифрованием) ────────────────────────
-async function signMessage(text) {
-    if (!signer) throw new Error('Кошелёк не подключён');
-    return await signer.signMessage(text);
-}
-
-async function sendMessage() {
-    const input = document.getElementById('msg-input');
-    const plaintext = input.value.trim();
-    if (!plaintext || !store.currentChat) return;
-    if (!signer) { openModal('wallet-modal'); return; }
-
-    const chat = getChatById(store.currentChat);
-    if (!chat) return;
-
-    const recipient = ethers.utils.isAddress(chat.id) ? chat.id : null;
-    if (!recipient) {
-        showToast('❌ Чат не является контактом (нет адреса)', 'error');
-        return;
-    }
-
-    const btn = document.getElementById('send-btn');
-    btn.disabled = true;
-    input.disabled = true;
-    const originalPlaceholder = input.placeholder;
-    input.placeholder = '✍️ Шифрование...';
-
-    try {
-        // Шифруем текст (ключ будет закэширован)
-        const encryptedText = await encrypt(plaintext, recipient);
-        console.log('🔒 Сообщение зашифровано');
-        
-        // Подписываем ОТКРЫТЫЙ текст (как в спецификации)
-        const signature = await signMessage(plaintext);
-        
-        const msgContract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
-        const tx = await msgContract.sendMessage(recipient, encryptedText, signature);
-
-        showToast('📤 Транзакция отправлена. Ожидайте...', 'info');
-        await tx.wait();
-
-        // Добавляем отправленное сообщение локально
-        const newMsg = {
-            id: Date.now().toString() + userAddress,
-            text: encryptedText,
-            sent: true,
-            time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-            status: 'delivered',
-            signature: signature,
-            sender: userAddress,
-            timestamp: Math.floor(Date.now() / 1000)
-        };
-        chat.messages.push(newMsg);
-        chat.preview = plaintext;
-        chat.time = newMsg.time;
-
-        if (store.currentChat === recipient) {
-            renderMessages();
-        }
-        renderChatList();
-
-        input.value = '';
-        showToast('✅ Сообщение сохранено в блокчейне!', 'success');
-        await loadMessagesForChat(recipient);
-    } catch (e) {
-        console.error('Send error:', e);
-        showToast('❌ Ошибка: ' + (e.reason || e.message), 'error');
-    } finally {
-        btn.disabled = false;
-        input.disabled = false;
-        input.placeholder = originalPlaceholder;
-        input.focus();
-    }
-}
-
-// ─── Загрузка сообщений (с расшифровкой с использованием кэшированного ключа) ───
-async function loadMessagesForChat(chatId) {
-    if (!signer || !userAddress) return;
-
-    const counterparty = ethers.utils.isAddress(chatId) ? chatId : null;
-    if (!counterparty) return;
-
-    try {
-        // Заранее получаем ключ для этого чата (кэшируется)
-        const sharedKey = await getSharedKey(counterparty);
-        
-        const msgContract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
-        const [sent, received] = await msgContract.getConversation(userAddress, counterparty, 0, 50);
-
-        const allMessages = [...sent, ...received].sort((a, b) => a.timestamp - b.timestamp);
-        if (allMessages.length === 0) return;
-
-        let chat = getChatById(chatId);
-        if (!chat) {
-            if (deletedChatsStore.has(counterparty)) return;
-
-            const profile = await getProfileByAddress(counterparty);
-            const name = profile?.username || counterparty.slice(0, 8) + '...';
-            contactsStore.add({ address: counterparty, username: profile?.username });
-            chat = {
-                id: counterparty,
-                name: name,
-                avatar: '👤',
-                online: false,
-                folder: 'personal',
-                messages: [],
-                isContact: true
-            };
-            store.chats.push(chat);
-            renderChatList();
-            console.log(`🆕 Чат с ${counterparty} создан при загрузке сообщений`);
-        }
-
-        const formatted = [];
-        for (const m of allMessages) {
-            const isSentByMe = m.sender.toLowerCase() === userAddress.toLowerCase();
-            let displayText = m.text;
-            
-            // Пытаемся расшифровать с уже готовым ключом
-            try {
-                const decrypted = await decryptWithKey(m.text, sharedKey);
-                if (decrypted !== m.text) displayText = decrypted;
-            } catch (e) {
-                // оставляем m.text
-            }
-            
-            formatted.push({
-                id: m.timestamp.toString() + m.sender,
-                text: displayText,
-                sent: isSentByMe,
-                time: new Date(m.timestamp * 1000).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-                status: 'delivered',
-                signature: m.signature,
-                sender: m.sender,
-                timestamp: m.timestamp
-            });
-        }
-
-        chat.messages = formatted;
-        if (formatted.length > 0) {
-            const last = formatted[formatted.length-1];
-            chat.preview = last.text.length > 50 ? last.text.substring(0, 47) + '...' : last.text;
-            chat.time = last.time;
-        }
-
-        if (store.currentChat === chatId) {
-            renderMessages();
-        }
-        renderChatList();
-    } catch (e) {
-        console.error('Load messages error:', e);
-    }
-}
-
-async function refreshCurrentChat() {
-    if (!store.currentChat) return;
-    await loadMessagesForChat(store.currentChat);
-    if (!autoRefreshInterval) showToast('🔄 Чат обновлён', 'info');
-}
-
-// ─── Автообновление текущего чата ─────────────────────────────────────────────
-function startAutoRefresh() {
-    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-    autoRefreshInterval = setInterval(async () => {
-        if (store.currentChat && signer) {
-            await loadMessagesForChat(store.currentChat);
-        }
-    }, 10000);
-}
-
-// Фоновое обнаружение (на случай, если сообщение пришло, а чат не открыт)
-function startDiscovery() {
-    if (discoveryInterval) clearInterval(discoveryInterval);
-    discoveryInterval = setInterval(async () => {
-        if (!signer || !userAddress) return;
-        await discoverNewChats();
-    }, 30000);
-}
-
-async function discoverNewChats() {
-    const msgContract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
-    const addressesToCheck = contactsStore.list.map(c => c.address);
-    store.chats.forEach(chat => {
-        if (ethers.utils.isAddress(chat.id) && !addressesToCheck.includes(chat.id)) {
-            addressesToCheck.push(chat.id);
-        }
+  if (!window.ethereum) { setWalletMsg('⚠️ Установите MetaMask', 'error'); return; }
+  const btn = document.getElementById('connect-btn');
+  btn.disabled = true;
+  setWalletMsg('⏳ Подключение...', 'info');
+  try {
+    await window.ethereum.request({method:'eth_requestAccounts'});
+    await initWallet();
+    setWalletMsg('✅ Подключено!', 'success');
+    setTimeout(()=>closeModal('wallet-modal'), 600);
+    window.ethereum.on('accountsChanged', async accounts => {
+      if (!accounts.length) { userAddress=null;signer=null;provider=null;currentUsername='';updateSidebarAvatar();updateInputState(); }
+      else await initWallet();
     });
-
-    for (const addr of addressesToCheck) {
-        if (deletedChatsStore.has(addr)) continue;
-        try {
-            const count = await msgContract.messageCount(userAddress, addr);
-            if (count.gt(0) && !getChatById(addr)) {
-                const profile = await getProfileByAddress(addr);
-                const name = profile?.username || addr.slice(0, 8) + '...';
-                contactsStore.add({ address: addr, username: profile?.username });
-                store.chats.push({
-                    id: addr,
-                    name: name,
-                    avatar: '👤',
-                    online: false,
-                    folder: 'personal',
-                    messages: [],
-                    isContact: true
-                });
-                renderChatList();
-                console.log(`🆕 Обнаружен новый чат с ${addr}`);
-            }
-        } catch (e) { /* игнорируем */ }
-    }
+    window.ethereum.on('chainChanged', ()=>location.reload());
+  } catch(e) {
+    setWalletMsg('❌ '+(e.message||'Отменено'), 'error');
+    btn.disabled = false;
+  }
 }
-
-function deleteChat(chatId) {
-    const index = store.chats.findIndex(c => c.id === chatId);
-    if (index === -1) return;
-
-    if (ethers.utils.isAddress(chatId)) {
-        contactsStore.remove(chatId);
-    }
-    deletedChatsStore.add(chatId);
-
-    store.chats.splice(index, 1);
-    if (store.currentChat === chatId) {
-        store.currentChat = null;
-        renderEmptyState();
-        updateInputState();
-    }
-    renderChatList();
-    showToast('🗑️ Чат удалён', 'info');
-}
-
-function getChatById(id) {
-    return store.chats.find(c => c.id === id);
-}
-
-// ─── Рендеринг ───────────────────────────────────────────────────────────────
-function renderSidebar() {
-    document.querySelectorAll('.sidebar-item').forEach(item => {
-        if (item.dataset.folder) {
-            item.onclick = function() {
-                document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
-                this.classList.add('active');
-                store.currentFolder = this.dataset.folder || 'all';
-                store.currentChat   = null;
-                renderChatList();
-                renderEmptyState();
-                updateInputState();
-            };
-        }
-    });
-
-    document.querySelectorAll('.chat-tab').forEach(tab => {
-        tab.onclick = function() {
-            document.querySelectorAll('.chat-tab').forEach(t => t.classList.remove('active'));
-            this.classList.add('active');
-        };
-    });
-}
-
-function renderChatList() {
-    const list = document.getElementById('chat-list');
-    let allChats = [...store.chats];
-
-    contactsStore.list.forEach(contact => {
-        if (deletedChatsStore.has(contact.address)) return;
-        if (!allChats.find(c => c.id === contact.address)) {
-            allChats.push({
-                id: contact.address,
-                name: contact.username || contact.address.slice(0, 8) + '...',
-                avatar: '👤',
-                online: false,
-                folder: 'personal',
-                preview: 'Напишите первое сообщение',
-                time: '', unread: 0, messages: [], isContact: true
-            });
-        }
-    });
-
-    allChats = allChats.filter(chat => !deletedChatsStore.has(chat.id));
-
-    const filtered = store.currentFolder === 'all'
-        ? allChats
-        : allChats.filter(c => c.folder === store.currentFolder);
-
-    const newHtml = filtered.map(chat => `
-        <div class="chat-item ${store.currentChat === chat.id ? 'active' : ''}" onclick="selectChat('${chat.id}')">
-            <div class="chat-avatar ${chat.online ? 'online' : ''}">${chat.avatar}</div>
-            <div class="chat-info">
-                <div class="chat-header-row">
-                    <span class="chat-name">${chat.name}${chat.isContact ? ' <span class="contact-badge">🔗</span>' : ''}</span>
-                    <span class="chat-time">${chat.time}</span>
-                </div>
-                <div class="chat-preview">
-                    ${chat.preview}
-                    ${chat.unread ? `<span class="badge">${chat.unread}</span>` : ''}
-                </div>
-            </div>
-            <button class="delete-chat-btn" onclick="event.stopPropagation(); deleteChat('${chat.id}')" title="Удалить чат">✕</button>
-        </div>
-    `).join('');
-
-    const newHash = newHtml;
-    if (newHash !== lastRenderedChatListHash) {
-        list.innerHTML = newHtml;
-        lastRenderedChatListHash = newHash;
-    }
-}
-
-function selectChat(id) {
-    store.currentChat = id;
-    const chat = getChatById(id);
-    if (chat) {
-        chat.unread = 0;
-        document.getElementById('chat-name').textContent   = chat.name || id.slice(0, 8) + '...';
-        document.getElementById('chat-status').textContent = chat.online ? '● в сети' : 'был недавно';
-        document.getElementById('chat-avatar').textContent = chat.avatar || '👤';
-        renderChatList();
-        loadMessagesForChat(id);
-        updateInputState();
-    }
-}
-
-function renderMessages() {
-    const container = document.getElementById('messages-container');
-    const chat      = getChatById(store.currentChat);
-    if (!container || !chat) return;
-
-    if (!chat.messages || chat.messages.length === 0) {
-        const emptyHtml = `
-            <div class="empty-state">
-                <div class="empty-state-icon">💬</div>
-                <h3>Нет сообщений</h3>
-                <p>Напишите первое сообщение!</p>
-            </div>
-        `;
-        if (container.innerHTML !== emptyHtml) container.innerHTML = emptyHtml;
-        lastRenderedMessagesHash = '';
-        return;
-    }
-
-    const messagesHtml = `
-        <div class="date-separator"><span>Последние сообщения</span></div>
-        ${chat.messages.map(m => `
-            <div class="message ${m.sent ? 'sent' : 'received'}">
-                <div class="message-text">${escapeHtml(m.text)}</div>
-                <div class="message-meta">
-                    <span>${m.time}</span>
-                    ${m.sent ? `
-                        <span class="status">${m.status === 'delivered' ? '✓✓' : '⏳'}</span>
-                        ${m.signature ? '<span class="sig-badge" title="Подписано кошельком">🔐</span>' : ''}
-                    ` : `
-                        ${m.signature ? '<span class="sig-badge" title="Подписано кошельком" style="cursor:pointer;" onclick="verifySignature(\'' + m.id + '\')">🔐</span>' : ''}
-                    `}
-                </div>
-            </div>
-        `).join('')}
-    `;
-
-    const newHash = messagesHtml;
-    if (newHash !== lastRenderedMessagesHash) {
-        container.innerHTML = messagesHtml;
-        container.scrollTop = container.scrollHeight;
-        lastRenderedMessagesHash = newHash;
-    }
-}
-
-async function verifySignature(msgId) {
-    const chat = getChatById(store.currentChat);
-    if (!chat) return;
-    const msg = chat.messages.find(m => m.id === msgId);
-    if (!msg || !msg.signature) return;
-
-    try {
-        const recovered = ethers.utils.verifyMessage(msg.text, msg.signature);
-        if (recovered.toLowerCase() === msg.sender.toLowerCase()) {
-            showToast('✅ Подпись верна! Отправитель подтверждён.', 'success');
-        } else {
-            showToast('⚠️ Подпись недействительна!', 'error');
-        }
-    } catch (e) {
-        showToast('❌ Ошибка проверки подписи', 'error');
-    }
-}
-
-function renderEmptyState() {
-    const container = document.getElementById('messages-container');
-    const emptyHtml = `
-        <div class="empty-state">
-            <div class="empty-state-icon">💬</div>
-            <h3>Выберите чат</h3>
-            <p>И подключите кошелёк для отправки</p>
-        </div>
-    `;
-    if (container.innerHTML !== emptyHtml) container.innerHTML = emptyHtml;
-    lastRenderedMessagesHash = '';
-}
-
-function updateInputState() {
-    const input = document.getElementById('msg-input');
-    const btn   = document.getElementById('send-btn');
-    if (!input || !btn) return;
-
-    if (store.currentChat && userAddress) {
-        input.disabled    = false;
-        btn.disabled      = false;
-        input.placeholder = 'Написать сообщение...';
-        input.focus();
-    } else if (!userAddress) {
-        input.disabled    = true;
-        btn.disabled      = true;
-        input.placeholder = '🔗 Подключите кошелёк';
-    } else {
-        input.disabled    = true;
-        btn.disabled      = true;
-        input.placeholder = 'Выберите чат...';
-    }
-}
-
-// ─── Аватар и меню пользователя ───────────────────────────────────────────────
-function updateAvatarMenu() {
-    const avatarBtn = document.getElementById('user-avatar-btn');
-    const avatarEmoji = document.getElementById('user-avatar-emoji');
-    if (avatarBtn && userAddress) {
-        const display = currentUsername || (userAddress.slice(0, 6) + '...' + userAddress.slice(-4));
-        avatarEmoji.textContent = currentUsername ? currentUsername.charAt(0).toUpperCase() : '👤';
-        avatarBtn.title = display;
-        avatarBtn.style.display = 'flex';
-    } else if (avatarBtn) {
-        avatarBtn.style.display = 'none';
-    }
-
-    const profileAddress = document.getElementById('profile-address');
-    const profileUsername = document.getElementById('profile-username');
-    if (profileAddress) profileAddress.textContent = userAddress || '—';
-    if (profileUsername) profileUsername.textContent = currentUsername || 'Не задан';
-}
-
-function toggleUserMenu() {
-    const menu = document.getElementById('user-dropdown-menu');
-    if (menu) menu.classList.toggle('hidden');
-}
-
-function openProfileModal() {
-    updateAvatarMenu();
-    openModal('profile-modal');
-    toggleUserMenu();
-}
-
-function openContactsModal() {
-    renderContactsList();
-    openModal('contacts-modal');
-    toggleUserMenu();
-}
-
-function renderContactsList() {
-    const container = document.getElementById('contacts-list');
-    if (!container) return;
-    if (contactsStore.list.length === 0) {
-        container.innerHTML = '<p class="text-zinc-500 text-sm text-center py-4">Нет контактов</p>';
-        return;
-    }
-    container.innerHTML = contactsStore.list.map(c => `
-        <div class="contact-item">
-            <span class="font-mono text-xs">${c.username || c.address.slice(0,8)+'...'}</span>
-            <span class="text-zinc-500 text-xs">${c.address.slice(0,6)}...${c.address.slice(-4)}</span>
-            <button onclick="contactsStore.remove('${c.address}'); renderContactsList(); renderChatList();" class="text-red-400 hover:text-red-300 text-xs">Удалить</button>
-        </div>
-    `).join('');
+function setWalletMsg(text, type) {
+  const el = document.getElementById('wallet-msg');
+  el.textContent = text; el.className = 'status-msg '+(type||'');
 }
 
 function logout() {
-    if (confirm('Выйти из аккаунта?')) {
-        userAddress = null;
-        signer = null;
-        sharedKeyCache.clear(); // Очищаем кэш ключей при выходе
-        updateAvatarMenu();
-        updateInputState();
-        renderEmptyState();
-        showToast('Вы вышли из кошелька', 'info');
-        toggleUserMenu();
+  provider=signer=null; userAddress=''; currentUsername=''; isAdmin=false;
+  updateSidebarAvatar(); updateInputState(); updateShareButton();
+  stopAutoRefresh(); stopDiscovery();
+  store.currentChat = null;
+  renderChatList(); renderWelcome();
+  showToast('👋 Вышли из аккаунта', 'info');
+}
+
+// ─── Registration ─────────────────────────────────────────────────────────────
+async function checkRegistration() {
+  if (!provider || !userAddress) return;
+  try {
+    const c = new ethers.Contract(IDENTITY_CONTRACT_ADDRESS, IDENTITY_ABI, provider);
+    const ok = await c.isRegistered(userAddress);
+    if (!ok) setTimeout(openRegisterModal, 900);
+    else {
+      const profile = await getProfileByAddress(userAddress);
+      if (profile?.username) { currentUsername = profile.username; updateSidebarAvatar(); }
     }
+  } catch {}
 }
 
-// ─── Event Listeners ──────────────────────────────────────────────────────────
-function setupEventListeners() {
-    document.getElementById('send-btn').onclick     = sendMessage;
-    document.getElementById('msg-input').onkeypress = e => { if (e.key === 'Enter') sendMessage(); };
-    document.getElementById('user-avatar-btn').onclick = toggleUserMenu;
-    document.getElementById('connect-btn').onclick  = connectWallet;
-    document.getElementById('refresh-chat-btn').onclick = refreshCurrentChat;
-
-    document.getElementById('search-input').oninput = e => {
-        const query = e.target.value.toLowerCase();
-        document.querySelectorAll('.chat-item').forEach(item => {
-            const name = item.querySelector('.chat-name')?.textContent.toLowerCase() || '';
-            item.style.display = name.includes(query) ? 'flex' : 'none';
-        });
-    };
-
-    document.addEventListener('click', (e) => {
-        const menu = document.getElementById('user-dropdown-menu');
-        const btn = document.getElementById('user-avatar-btn');
-        if (menu && !menu.classList.contains('hidden') && !btn.contains(e.target) && !menu.contains(e.target)) {
-            menu.classList.add('hidden');
-        }
-    });
-
-    if (window.ethereum) {
-        window.ethereum.on("accountsChanged", async (accounts) => {
-            if (accounts.length === 0) {
-                userAddress = null;
-                signer = null;
-                sharedKeyCache.clear();
-                updateAvatarMenu();
-                updateInputState();
-                showToast('Кошелёк отключён', 'info');
-                stopAllIntervals();
-            } else {
-                await initWallet();
-                showToast(`Адрес сменён: ${userAddress.slice(0,6)}...${userAddress.slice(-4)}`, 'success');
-                if (store.currentChat) {
-                    await loadMessagesForChat(store.currentChat);
-                }
-            }
-        });
-
-        window.ethereum.on("chainChanged", () => {
-            window.location.reload();
-        });
-    }
+function openRegisterModal() {
+  const d = document.getElementById('register-address-display');
+  if (d) d.textContent = userAddress||'';
+  document.getElementById('register-username').value = '';
+  setRegisterMsg('', '');
+  document.getElementById('register-btn').disabled = false;
+  document.getElementById('register-modal').style.display = 'flex';
+}
+function closeRegisterModal() { document.getElementById('register-modal').style.display='none'; }
+function setRegisterMsg(t, type) {
+  const el = document.getElementById('register-msg');
+  el.textContent = t; el.className = 'status-msg '+(type||'');
 }
 
-function stopAllIntervals() {
-    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-    if (discoveryInterval) clearInterval(discoveryInterval);
-    autoRefreshInterval = null;
-    discoveryInterval = null;
+async function registerUser() {
+  const name = document.getElementById('register-username').value.trim();
+  if (!name)         { setRegisterMsg('⚠️ Введите никнейм', 'error'); return; }
+  if (name.length<3) { setRegisterMsg('⚠️ Минимум 3 символа', 'error'); return; }
+  if (!/^[a-zA-Z0-9_а-яёА-ЯЁ]+$/.test(name)) { setRegisterMsg('⚠️ Только буквы, цифры и _', 'error'); return; }
+  document.getElementById('register-btn').disabled = true;
+  setRegisterMsg('⏳ Отправка транзакции...', 'info');
+  try {
+    const c  = new ethers.Contract(IDENTITY_CONTRACT_ADDRESS, IDENTITY_ABI, signer);
+    const tx = await c.registerProfile(name, '', '');
+    setRegisterMsg('⏳ Ожидание подтверждения...', 'info');
+    await tx.wait();
+    currentUsername = name;
+    closeRegisterModal();
+    updateSidebarAvatar();
+    showToast('✅ Добро пожаловать, '+name+'!', 'success');
+  } catch(e) {
+    setRegisterMsg('❌ '+(e.reason||e.data?.message||e.message||'Ошибка'), 'error');
+    document.getElementById('register-btn').disabled = false;
+  }
 }
 
-// ─── Модалки ─────────────────────────────────────────────────────────────────
-function openModal(id)  { document.getElementById(id).style.display = 'flex'; }
-function closeModal(id) {
-    document.getElementById(id).style.display = 'none';
-    const msg = document.getElementById('wallet-msg');
-    if (msg) { msg.textContent = ''; msg.className = 'status-msg'; }
-}
-function showError(elId, msg) {
-    const el = document.getElementById(elId);
-    if (el) { el.textContent = msg; el.className = 'status-msg error'; }
-}
-function showStatus(msg, type) {
-    const el = document.getElementById('wallet-msg');
-    if (el) {
-        el.textContent   = msg;
-        el.className     = `status-msg ${type}`;
-        el.style.display = 'block';
-        setTimeout(() => el.style.display = 'none', 2500);
-    }
-}
+// ─── Sidebar avatar ───────────────────────────────────────────────────────────
+function updateSidebarAvatar() {
+  const btn   = document.getElementById('user-avatar-btn');
+  const circle = document.getElementById('user-avatar-circle');
+  const adminBtn  = document.getElementById('admin-btn');
+  const adminItem = document.getElementById('admin-menu-item');
 
-function showToast(msg, type = 'success') {
-    let toast = document.getElementById('global-toast');
-    if (!toast) {
-        toast = document.createElement('div');
-        toast.id = 'global-toast';
-        document.body.appendChild(toast);
-    }
-    toast.textContent = msg;
-    toast.className   = `toast toast-${type} toast-show`;
-    clearTimeout(toast._timer);
-    toast._timer = setTimeout(() => toast.classList.remove('toast-show'), 3500);
-}
-
-// ─── Утилиты ─────────────────────────────────────────────────────────────────
-function escapeHtml(t) {
-    const d = document.createElement('div');
-    d.textContent = t;
-    return d.innerHTML;
-}
-
-// ─── Админские функции ────────────────────────────────────────────────────────
-function updateAdminButton() {
-    const adminBtn = document.getElementById('admin-btn');
-    if (adminBtn) adminBtn.style.display = isAdmin ? 'flex' : 'none';
-}
-
-function openAdminModal() {
-    if (!isAdmin) { alert('🔒 Доступ разрешён только владельцу.'); return; }
-    document.getElementById('admin-modal').style.display = 'flex';
-    document.getElementById('escrow-status').style.display = 'none';
-    document.getElementById('escrow-user-address').value = '';
-    toggleUserMenu();
-}
-
-async function accessEscrowKey() {
-    const userAddr = document.getElementById('escrow-user-address').value.trim();
-    const statusEl = document.getElementById('escrow-status');
-    if (!userAddr || !ethers.utils.isAddress(userAddr)) {
-        statusEl.textContent = '⚠️ Введите корректный адрес';
-        statusEl.style.color = 'var(--warning)';
-        statusEl.style.display = 'block';
-        return;
-    }
-    statusEl.textContent = '🔍 Запрос к смарт-контракту...';
-    statusEl.style.color = 'var(--text-muted)';
-    statusEl.style.display = 'block';
-    try {
-        await new Promise(r => setTimeout(r, 1200));
-        const mockKey = "0x" + Array(64).fill(0).map(() => Math.floor(Math.random()*16).toString(16)).join('');
-        statusEl.innerHTML = `✅ Ключ получен!<br><code style="background:var(--bg-tertiary); padding:6px 10px; border-radius:6px;">${mockKey}</code>`;
-        statusEl.style.color = 'var(--success)';
-    } catch (err) {
-        statusEl.textContent = '❌ Ошибка: ' + (err.reason || err.message);
-        statusEl.style.color = 'var(--danger)';
-    }
+  if (userAddress) {
+    btn.style.display = 'block';
+    const name = currentUsername || userAddress;
+    const bg   = _colorFor(userAddress.toLowerCase());
+    const lbl  = currentUsername ? _initials(currentUsername) : userAddress.slice(2,4).toUpperCase();
+    circle.style.background = bg;
+    circle.textContent = lbl;
+    // update dropdown header too
+    const da = document.getElementById('dropdown-avatar-circle');
+    const dn = document.getElementById('dropdown-username');
+    const dd = document.getElementById('dropdown-address');
+    if (da) { da.style.background=bg; da.textContent=lbl; }
+    if (dn) dn.textContent = currentUsername || 'Аккаунт';
+    if (dd) dd.textContent = userAddress.slice(0,8)+'...'+userAddress.slice(-4);
+  } else {
+    btn.style.display = 'none';
+    const walletBtn = document.getElementById('wallet-btn');
+    if (walletBtn) walletBtn.style.display = 'flex';
+  }
+  if (adminBtn)  adminBtn.style.display  = isAdmin ? 'flex' : 'none';
+  if (adminItem) adminItem.style.display = isAdmin ? 'flex' : 'none';
 }
 
 function updateShareButton() {
-    const btn = document.getElementById('share-profile-btn');
-    if (btn) btn.style.display = userAddress ? 'flex' : 'none';
+  const btn = document.getElementById('share-profile-btn');
+  if (btn) btn.style.display = userAddress ? 'flex' : 'none';
 }
 
-async function openShareModal() {
-    if (!userAddress) { alert('🔗 Сначала подключите кошелёк'); return; }
-    const modal = document.getElementById('share-modal');
-    const qrContainer = document.getElementById('qr-container');
-    const linkInput = document.getElementById('share-link-input');
-    const shareUrl = `${BASE_URL}?contact=${userAddress}`;
-    linkInput.value = shareUrl;
-    qrContainer.innerHTML = '';
-    new QRCode(qrContainer, { text: shareUrl, width: 180, height: 180, correctLevel: QRCode.CorrectLevel.M });
-    modal.style.display = 'flex';
-    toggleUserMenu();
+function updateInputState() {
+  const input   = document.getElementById('msg-input');
+  const sendBtn = document.getElementById('send-btn');
+  if (!input) return;
+  const ok = !!(userAddress && store.currentChat);
+  input.disabled = !ok;
+  if (sendBtn) sendBtn.disabled = !ok;
+  if (!userAddress)       input.placeholder = 'Подключите MetaMask...';
+  else if (!store.currentChat) input.placeholder = 'Выберите чат...';
+  else                    input.placeholder = 'Напишите сообщение...';
 }
 
-async function copyShareLink() {
-    const input = document.getElementById('share-link-input');
-    try {
-        await navigator.clipboard.writeText(input.value);
-        showStatus('✅ Ссылка скопирована!', 'success');
-    } catch (e) {
-        input.select(); document.execCommand('copy');
-        showStatus('✅ Ссылка скопирована!', 'success');
+function toggleUserMenu() {
+  document.getElementById('user-dropdown-menu').classList.toggle('hidden');
+}
+
+// ─── Folders / Tabs ───────────────────────────────────────────────────────────
+const FOLDER_TITLES = { all:'Все чаты', personal:'Личное', news:'Новости', work:'Работа' };
+
+function setFolder(folder) {
+  store.currentFolder = folder;
+  store.currentChat   = null;
+  document.querySelectorAll('.sb-icon[data-folder]').forEach(el =>
+    el.classList.toggle('active', el.dataset.folder === folder));
+  const title = document.getElementById('folder-title');
+  if (title) title.textContent = FOLDER_TITLES[folder] || 'Чаты';
+  renderChatList();
+  renderWelcome();
+  updateInputState();
+}
+
+function setTab(tab) {
+  store.currentTab = tab;
+  document.querySelectorAll('.filter-tab').forEach(el =>
+    el.classList.toggle('active', el.dataset.tab === tab));
+  renderChatList();
+}
+
+// ─── Load messages from blockchain ───────────────────────────────────────────
+async function loadMessages(chatId) {
+  if (!signer || !userAddress) return;
+  if (!ethers.utils.isAddress(chatId)) return;
+  try {
+    const contract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
+    const [sent, received] = await contract.getConversation(userAddress, chatId, 0, 50);
+    const all = [...sent, ...received].sort((a,b) => a.timestamp - b.timestamp);
+    if (!all.length) return;
+
+    const msgs = await Promise.all(all.map(async m => {
+      const { text, encrypted } = await decryptMsg(m.text, userAddress, chatId);
+      return {
+        id:        m.timestamp.toString()+m.sender,
+        text,
+        sent:      m.sender.toLowerCase() === userAddress.toLowerCase(),
+        time:      new Date(m.timestamp*1000).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}),
+        signature: m.signature,
+        sender:    m.sender,
+        timestamp: m.timestamp,
+        encrypted,
+      };
+    }));
+
+    let chat = store.chats.find(c=>c.id===chatId);
+    if (!chat) {
+      if (deletedChatsStore.has(chatId)) return;
+      chat = { id:chatId, name:chatId.slice(0,8)+'…', avatar:'', online:false, folder:'personal', unread:0, messages:[], isContact:true };
+      store.chats.push(chat);
     }
+    chat.messages = msgs;
+    if (msgs.length) {
+      const last = msgs[msgs.length-1];
+      chat.preview = last.text;
+      chat.time    = last.time;
+    }
+    renderChatList();
+    if (store.currentChat === chatId) renderMessages();
+    updateBadges();
+  } catch(e) { console.warn('loadMessages:', e.message); }
 }
 
-function shareToTelegram() {
-    const url = document.getElementById('share-link-input').value;
-    const text = `Привет! Добавь меня в Web3 Messenger — децентрализованный мессенджер на Polygon: ${url}`;
-    window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, '_blank');
+// ─── Send message ─────────────────────────────────────────────────────────────
+async function sendMessage() {
+  const input = document.getElementById('msg-input');
+  const text  = (input.value||'').trim();
+  if (!text || !userAddress || !store.currentChat) return;
+  if (!ethers.utils.isAddress(store.currentChat)) {
+    showToast('❌ Этот чат не в блокчейне', 'error'); return;
+  }
+  const sendBtn = document.getElementById('send-btn');
+  sendBtn.disabled = input.disabled = true;
+  try {
+    const sig  = await signer.signMessage(text);
+    const enc  = await encryptMsg(text, userAddress, store.currentChat);
+    const c    = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
+    const tx   = await c.sendMessage(store.currentChat, enc, sig);
+    showToast('📤 Транзакция отправлена...', 'info');
+    await tx.wait();
+    const now  = new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+    const chat = store.chats.find(c=>c.id===store.currentChat);
+    if (chat) {
+      chat.messages.push({ id:Date.now()+userAddress, text, sent:true, time:now, signature:sig, sender:userAddress, timestamp:Math.floor(Date.now()/1000), encrypted:true });
+      chat.preview = text; chat.time = now;
+    }
+    input.value = '';
+    renderChatList(); renderMessages();
+    showToast('✅ Отправлено в блокчейн!', 'success');
+    await loadMessages(store.currentChat);
+  } catch(e) { showToast('❌ '+(e.reason||e.message), 'error'); }
+  finally { sendBtn.disabled = !(userAddress&&store.currentChat); input.disabled = false; input.focus(); }
 }
 
-function shareToWhatsApp() {
-    const url = document.getElementById('share-link-input').value;
-    const text = `Привет! Добавь меня в Web3 Messenger — децентрализованный мессенджер на Polygon: ${url}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+function verifySignature(text, sig, sender) {
+  try {
+    const rec = ethers.utils.verifyMessage(text, sig);
+    showToast(rec.toLowerCase()===sender.toLowerCase() ? '✅ Подпись верна!' : '⚠️ Подпись недействительна!',
+              rec.toLowerCase()===sender.toLowerCase() ? 'success' : 'error');
+  } catch { showToast('❌ Ошибка проверки', 'error'); }
 }
 
-function shareToTwitter() {
-    const url = document.getElementById('share-link-input').value;
-    const text = `Присоединяйся ко мне в Web3 Messenger — децентрализованный чат на Polygon! ${url} #Web3 #Polygon #Messenger`;
-    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank');
+// ─── Render welcome ──────────────────────────────────────────────────────────
+function renderWelcome() {
+  const container = document.getElementById('messages-container');
+  if (!container || store.currentChat) return;
+  container.innerHTML = `
+    <div class="empty-state">
+      <div class="empty-icon">
+        <svg viewBox="0 0 80 80" fill="none"><circle cx="40" cy="40" r="40" fill="rgba(64,167,227,0.08)"/><path d="M20 30c0-3.3 2.7-6 6-6h28c3.3 0 6 2.7 6 6v18c0 3.3-2.7 6-6 6H46l-6 6-6-6H26c-3.3 0-6-2.7-6-6V30z" fill="rgba(64,167,227,0.15)" stroke="#40A7E3" stroke-width="1.5"/><circle cx="32" cy="39" r="2.5" fill="#40A7E3"/><circle cx="40" cy="39" r="2.5" fill="#40A7E3"/><circle cx="48" cy="39" r="2.5" fill="#40A7E3"/></svg>
+      </div>
+      <h3>Добро пожаловать</h3>
+      <p>Выберите чат или добавьте новый контакт по 0x-адресу</p>
+      ${!userAddress ? `<button class="btn-primary" onclick="openModal('wallet-modal')">Подключить MetaMask</button>` : ''}
+    </div>`;
 }
 
+// ─── Render messages ──────────────────────────────────────────────────────────
+function renderMessages() {
+  const container = document.getElementById('messages-container');
+  if (!container) return;
+  const chat = store.currentChat ? store.chats.find(c=>c.id===store.currentChat) : null;
+  if (!chat) { renderWelcome(); return; }
+
+  // Update topbar
+  const { bg, label } = avatarFor(chat);
+  const topAvatar = document.getElementById('chat-avatar');
+  if (topAvatar) { topAvatar.style.background=bg; topAvatar.textContent=label; }
+  const topName   = document.getElementById('chat-name');
+  if (topName)   topName.textContent = chat.name;
+  const topStatus = document.getElementById('chat-status');
+  if (topStatus) {
+    topStatus.textContent  = chat.online ? '● в сети' : 'был(а) недавно';
+    topStatus.className    = 'chat-topbar-status'+(chat.online ? '' : ' offline');
+  }
+
+  if (!chat.messages || !chat.messages.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">
+          <svg viewBox="0 0 80 80" fill="none"><circle cx="40" cy="40" r="40" fill="rgba(64,167,227,0.06)"/><path d="M20 30c0-3.3 2.7-6 6-6h28c3.3 0 6 2.7 6 6v18c0 3.3-2.7 6-6 6H46l-6 6-6-6H26c-3.3 0-6-2.7-6-6V30z" fill="rgba(64,167,227,0.12)" stroke="#40A7E3" stroke-width="1.5"/></svg>
+        </div>
+        <h3>Нет сообщений</h3>
+        <p>Начните переписку — сообщения хранятся в блокчейне Polygon</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = '';
+
+  // Date separator
+  const sep = document.createElement('div');
+  sep.className = 'date-sep';
+  sep.innerHTML = '<span>Сегодня</span>';
+  container.appendChild(sep);
+
+  let prevSent = null;
+  chat.messages.forEach(msg => {
+    const isFirst = (prevSent !== msg.sent);
+    prevSent = msg.sent;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'message '+(msg.sent ? 'sent' : 'received');
+
+    const encIcon = msg.encrypted !== false
+      ? `<span class="msg-enc" title="AES-256-GCM зашифровано"${!msg.sent ? ` onclick="verifySignature(${JSON.stringify(msg.text)},${JSON.stringify(msg.signature||'')},${JSON.stringify(msg.sender||'')})"` : ''}>🔐</span>`
+      : `<span class="msg-enc" title="Открытый текст">🔓</span>`;
+
+    const ticks = msg.sent ? `<span class="msg-tick read">✓✓</span>` : '';
+
+    wrap.innerHTML = `
+      <div class="msg-bubble">
+        <div class="msg-text">${escHtml(msg.text)}</div>
+        <div class="msg-meta">
+          ${encIcon}
+          <span class="msg-time">${msg.time}</span>
+          ${ticks}
+        </div>
+      </div>`;
+    container.appendChild(wrap);
+  });
+
+  container.scrollTop = container.scrollHeight;
+}
+
+function escHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── Render chat list ─────────────────────────────────────────────────────────
+function renderChatList() {
+  const el    = document.getElementById('chat-list');
+  if (!el) return;
+  const query = (document.getElementById('search-input')?.value || '').toLowerCase();
+
+  const visible = store.chats.filter(chat => {
+    if (deletedChatsStore.has(chat.id)) return false;
+    if (store.currentFolder !== 'all' && chat.folder !== store.currentFolder) return false;
+    if (query && !chat.name.toLowerCase().includes(query) && !chat.id.toLowerCase().includes(query)) return false;
+    if (store.currentTab === 'unread' && !chat.unread) return false;
+    return true;
+  });
+
+  if (!visible.length) {
+    el.innerHTML = `<div style="text-align:center;padding:32px 16px;color:var(--text-muted);font-size:13px">
+      ${query ? 'Ничего не найдено' : 'Нет чатов'}
+      ${!userAddress && !query ? `<br><button class="btn-primary" style="margin-top:12px;font-size:13px" onclick="openModal('wallet-modal')">Подключить кошелёк</button>` : ''}
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = '';
+  visible.forEach(chat => {
+    const item = document.createElement('div');
+    item.className = 'chat-item'+(store.currentChat===chat.id ? ' active' : '');
+
+    const av = avatarEl(chat);
+    item.appendChild(av);
+
+    const info = document.createElement('div');
+    info.className = 'chat-info';
+
+    const lastMsg = chat.messages?.[chat.messages.length-1];
+    const timeStr = chat.time || '';
+    const preview = chat.preview || 'Напишите первое сообщение';
+
+    info.innerHTML = `
+      <div class="chat-row1">
+        <span class="chat-name">${escHtml(chat.name)}</span>
+        <span class="chat-time">${timeStr}</span>
+      </div>
+      <div class="chat-row2">
+        <span class="chat-preview">${escHtml(preview)}</span>
+        ${chat.unread ? `<span class="unread-badge">${chat.unread}</span>` : ''}
+      </div>`;
+
+    item.appendChild(info);
+
+    // Delete button
+    const del = document.createElement('button');
+    del.className = 'delete-chat-btn';
+    del.textContent = '✕';
+    del.title = 'Удалить чат';
+    del.onclick = (e) => { e.stopPropagation(); deleteChat(chat.id); };
+    item.appendChild(del);
+
+    item.addEventListener('click', () => selectChat(chat.id));
+    el.appendChild(item);
+  });
+
+  updateBadges();
+}
+
+function selectChat(id) {
+  store.currentChat = id;
+  const chat = store.chats.find(c=>c.id===id);
+  if (chat) { chat.unread=0; }
+  renderChatList();
+  renderMessages();
+  updateInputState();
+  if (ethers.utils.isAddress(id)) loadMessages(id);
+}
+
+function deleteChat(id) {
+  if (ethers.utils.isAddress(id)) contactsStore.remove(id);
+  deletedChatsStore.add(id);
+  if (store.currentChat === id) { store.currentChat=null; renderWelcome(); updateInputState(); }
+  renderChatList();
+  showToast('🗑️ Чат удалён', 'info');
+}
+
+function updateBadges() {
+  ['all','personal','news','work'].forEach(f => {
+    const count = store.chats.filter(c=>!deletedChatsStore.has(c.id)&&(f==='all'||c.folder===f)&&c.unread>0).reduce((s,c)=>s+c.unread,0);
+    const el = document.getElementById(f+'-badge');
+    if (!el) return;
+    el.textContent = count||'';
+    el.style.display = count>0 ? 'flex' : 'none';
+  });
+}
+
+// ─── Add contact ──────────────────────────────────────────────────────────────
 async function addContactFromInput() {
-    const input = document.getElementById('add-contact-input');
-    const query = input.value.trim();
-    if (!query) return;
-    try {
-        showStatus('🔍 Поиск...', 'info');
-        let address = query;
-        if (!ethers.utils.isAddress(query)) throw new Error('Введите корректный адрес');
-        const profile = await getProfileByAddress(address);
-        if (profile && profile.isActive) {
-            contactsStore.add({ address, ...profile });
-        } else {
-            contactsStore.add({ address });
-        }
-        deletedChatsStore.delete(address);
-        renderChatList();
-        showStatus('✅ Контакт добавлен!', 'success');
-        input.value = '';
-    } catch (e) {
-        showStatus('❌ ' + e.message, 'error');
+  const input = document.getElementById('add-contact-input');
+  const addr  = (input?.value||'').trim();
+  if (!addr) return;
+  if (!ethers.utils.isAddress(addr)) { showToast('❌ Введите корректный 0x-адрес', 'error'); return; }
+  const profile = await getProfileByAddress(addr);
+  const contact = profile?.isActive ? { address:addr, ...profile } : { address:addr };
+  if (contactsStore.add(contact)) {
+    deletedChatsStore.del(addr);
+    _syncContactChats();
+    renderChatList();
+    input.value = '';
+    showToast('✅ Контакт добавлен!', 'success');
+  } else showToast('ℹ️ Контакт уже есть', 'info');
+}
+
+function _syncContactChats() {
+  contactsStore.list.forEach(c => {
+    if (deletedChatsStore.has(c.address)) return;
+    if (!store.chats.find(ch=>ch.id===c.address)) {
+      store.chats.push({
+        id:c.address, name:c.username||c.address.slice(0,8)+'…',
+        avatar:'', online:false, folder:'personal', unread:0, messages:[],
+        isContact:true, preview:'Напишите первое сообщение',
+      });
     }
+  });
 }
 
-function openSettingsModal() {
-    openModal('settingsModal');
-    toggleUserMenu();
+// ─── Auto-refresh / Discovery ─────────────────────────────────────────────────
+function startAutoRefresh() {
+  stopAutoRefresh();
+  autoRefreshInterval = setInterval(() => {
+    if (store.currentChat && ethers.utils.isAddress(store.currentChat)) loadMessages(store.currentChat);
+  }, 10000);
+}
+function stopAutoRefresh() { if(autoRefreshInterval){clearInterval(autoRefreshInterval);autoRefreshInterval=null;} }
+
+function startDiscovery() {
+  stopDiscovery();
+  discoveryInterval = setInterval(async () => {
+    if (!signer||!userAddress) return;
+    const c = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
+    for (const contact of contactsStore.list) {
+      if (deletedChatsStore.has(contact.address)) continue;
+      try { const n=await c.messageCount(userAddress,contact.address); if(n.gt(0)) await loadMessages(contact.address); }
+      catch {}
+    }
+  }, 30000);
+}
+function stopDiscovery() { if(discoveryInterval){clearInterval(discoveryInterval);discoveryInterval=null;} }
+
+async function refreshCurrentChat() {
+  if (!store.currentChat) return;
+  await loadMessages(store.currentChat);
+  showToast('🔄 Обновлено', 'info');
 }
 
-// ─── Глобальный экспорт ──────────────────────────────────────────────────────
-window.selectChat          = selectChat;
-window.sendMessage         = sendMessage;
-window.connectWallet       = connectWallet;
-window.openAdminModal      = openAdminModal;
-window.accessEscrowKey     = accessEscrowKey;
-window.openShareModal      = openShareModal;
-window.copyShareLink       = copyShareLink;
-window.shareToTelegram     = shareToTelegram;
-window.shareToWhatsApp     = shareToWhatsApp;
-window.shareToTwitter      = shareToTwitter;
-window.addContactFromInput = addContactFromInput;
-window.closeModal          = closeModal;
-window.openRegisterModal   = openRegisterModal;
-window.closeRegisterModal  = closeRegisterModal;
-window.registerUser        = registerUser;
-window.refreshCurrentChat  = refreshCurrentChat;
-window.verifySignature     = verifySignature;
-window.deleteChat          = deleteChat;
-window.openSettingsModal   = openSettingsModal;
-window.toggleUserMenu      = toggleUserMenu;
-window.openProfileModal    = openProfileModal;
-window.openContactsModal   = openContactsModal;
-window.logout              = logout;
+// ─── Modals ───────────────────────────────────────────────────────────────────
+function openModal(id) { document.getElementById(id).style.display='flex'; }
+function closeModal(id) { document.getElementById(id).style.display='none'; }
+function closeModalOnBg(e,id) { if(e.target.id===id) closeModal(id); }
+
+function openProfileModal() {
+  document.getElementById('profile-address-display').textContent = userAddress||'—';
+  document.getElementById('profile-username-display').textContent = currentUsername||'Аккаунт';
+  const big = document.getElementById('profile-avatar-big');
+  if (big && userAddress) {
+    const bg  = _colorFor(userAddress.toLowerCase());
+    const lbl = currentUsername ? _initials(currentUsername) : userAddress.slice(2,4).toUpperCase();
+    big.style.background = bg; big.textContent = lbl;
+  }
+  openModal('profile-modal');
+  document.getElementById('user-dropdown-menu').classList.add('hidden');
+}
+function openContactsModal() {
+  const el = document.getElementById('contacts-list');
+  if (!el) return;
+  if (!contactsStore.list.length) {
+    el.innerHTML='<p style="text-align:center;color:var(--text-muted);padding:20px;font-size:13px">Нет контактов</p>';
+  } else {
+    el.innerHTML = contactsStore.list.map(c=>`
+      <div class="contact-item">
+        <div class="contact-info">
+          <div class="contact-name">${escHtml(c.username||c.address.slice(0,8)+'…')}</div>
+          <div class="contact-addr">${c.address.slice(0,6)}...${c.address.slice(-4)}</div>
+        </div>
+        <div class="contact-actions">
+          <button class="contact-btn-chat" onclick="selectChat('${c.address}');closeModal('contacts-modal')">Чат</button>
+          <button class="contact-btn-del"  onclick="removeContact('${c.address}')">Удалить</button>
+        </div>
+      </div>`).join('');
+  }
+  openModal('contacts-modal');
+  document.getElementById('user-dropdown-menu').classList.add('hidden');
+}
+function removeContact(addr) { contactsStore.remove(addr); openContactsModal(); renderChatList(); }
+function openSettingsModal() { openModal('settings-modal'); document.getElementById('user-dropdown-menu').classList.add('hidden'); }
+function openAdminModal()    { openModal('admin-modal');    document.getElementById('user-dropdown-menu').classList.add('hidden'); }
+
+// Admin escrow
+async function accessEscrowKey() {
+  const addr   = document.getElementById('escrow-user-address').value.trim();
+  const status = document.getElementById('escrow-status');
+  if (!addr || !ethers.utils.isAddress(addr)) {
+    status.textContent='⚠️ Введите корректный адрес'; status.className='status-msg error'; status.style.display='block'; return;
+  }
+  status.textContent='🔍 Запрос...'; status.className='status-msg info'; status.style.display='block';
+  await new Promise(r=>setTimeout(r,1200));
+  const key = '0x'+Array(64).fill(0).map(()=>Math.floor(Math.random()*16).toString(16)).join('');
+  status.textContent='✅ Ключ получен!\n'+key; status.className='status-msg success';
+  status.style.whiteSpace='pre-wrap'; status.style.wordBreak='break-all';
+}
+
+// Share / QR
+function openShareModal() {
+  if (!userAddress) return;
+  const url = window.location.origin+'/?contact='+userAddress;
+  document.getElementById('share-link-input').value = url;
+  const qr = document.getElementById('qr-container');
+  qr.innerHTML='';
+  try { new QRCode(qr, { text:url, width:168, height:168 }); } catch {}
+  openModal('share-modal');
+}
+function copyShareLink() {
+  navigator.clipboard.writeText(document.getElementById('share-link-input').value).catch(()=>{});
+  showToast('✅ Ссылка скопирована!', 'success');
+}
+function shareToTelegram() {
+  const url=document.getElementById('share-link-input').value;
+  window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent('Добавь меня в Web3 Messenger: '+url)}`, '_blank');
+}
+function shareToWhatsApp() {
+  const url=document.getElementById('share-link-input').value;
+  window.open(`https://wa.me/?text=${encodeURIComponent('Web3 Messenger: '+url)}`, '_blank');
+}
+function shareToTwitter() {
+  const url=document.getElementById('share-link-input').value;
+  window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent('Web3 Messenger на Polygon! '+url+' #Web3 #Polygon')}`, '_blank');
+}
+
+// Settings
+function clearAllData() {
+  if(!confirm('Сбросить все данные? Это нельзя отменить.')) return;
+  localStorage.clear(); location.reload();
+}
+
+// More menu (top bar)
+function toggleMoreMenu(btn) {
+  // simple placeholder
+  showToast('ℹ️ Меню в разработке', 'info');
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+function showToast(message, type='info') {
+  const c = document.getElementById('toast-container');
+  if (!c) return;
+  const d = document.createElement('div');
+  d.className = `toast ${type}`;
+  d.textContent = message;
+  c.appendChild(d);
+  setTimeout(()=>{ d.style.opacity='0'; setTimeout(()=>d.remove(),380); }, 3000);
+}
