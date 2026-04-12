@@ -4,8 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Web3 Messenger</title>
+    <!-- Favicon (SVG Data URI to avoid 404) -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💬</text></svg>">
+    
     <link rel="stylesheet" href="css/style.css">
-    <!-- Иконки и шрифты можно подключить здесь, если нужно -->
 </head>
 <body>
 
@@ -315,9 +317,10 @@
 <!-- Toast Container -->
 <div id="toast-container" class="toast-container"></div>
 
-<!-- Libraries -->
-<script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js" type="application/javascript"></script>
+<!-- Libraries (ИСПРАВЛЕНО: используем cdnjs для стабильности) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl.min.js"></script>
+
 <!-- App Logic -->
 <script src="js/app.js"></script>
 
