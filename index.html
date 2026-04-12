@@ -1,258 +1,225 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web3 Messenger</title>
-    <link rel="stylesheet" href="css/style.css">
-    <!-- ethers v5 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <!-- tweetnacl для E2E шифрования -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <link rel="icon" href="data:,">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web3 Messenger</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <link rel="icon" href="data:,">
 </head>
 <body>
-    <div class="app-container">
-        <aside class="sidebar">
-            <!-- Аватар и меню пользователя -->
-            <div class="sidebar-item" id="user-avatar-btn" style="display:none;" onclick="toggleUserMenu()">
-                <span id="user-avatar-emoji">👤</span>
-                <span>Аккаунт</span>
-            </div>
-            <div id="user-dropdown-menu" class="user-dropdown hidden">
-                <div class="user-dropdown-item" onclick="openProfileModal()">👤 Профиль</div>
-                <div class="user-dropdown-item" onclick="openContactsModal()">📇 Контакты</div>
-                <div class="user-dropdown-item" onclick="openSettingsModal()">⚙️ Настройки</div>
-                <div class="user-dropdown-item" onclick="openAdminModal()" id="admin-menu-item" style="display:none;">🛡️ Админ</div>
-                <div class="user-dropdown-item" onclick="logout()">🚪 Выйти</div>
-            </div>
 
-            <div class="sidebar-item active" data-folder="all">
-                <span>💬</span><span>Все</span><span class="sidebar-badge" id="all-badge">147</span>
-            </div>
-            <div class="sidebar-item" data-folder="personal">
-                <span>👤</span><span>Личное</span><span class="sidebar-badge" id="personal-badge"></span>
-            </div>
-            <div class="sidebar-item" data-folder="news">
-                <span>📰</span><span>Новости</span><span class="sidebar-badge" id="news-badge">11</span>
-            </div>
-            <div class="sidebar-item" data-folder="work">
-                <span>💼</span><span>Работа</span><span class="sidebar-badge" id="work-badge">38</span>
-            </div>
-            <div class="sidebar-item" id="admin-btn" style="display:none;" onclick="openAdminModal()">
-                <span>🛡️</span><span>Админ</span>
-            </div>
-        </aside>
+<div class="app-container">
 
-        <div class="chat-panel">
-            <div class="chat-header">
-                <div class="add-contact-box">
-                    <input type="text" id="add-contact-input" placeholder="0xAddress или имя...">
-                    <button class="icon-btn" onclick="addContactFromInput()" title="Добавить контакт">➕</button>
-                </div>
-                <div class="search-box">
-                    <span>🔍</span><input type="text" placeholder="Search" id="search-input">
-                </div>
-                <div class="chat-tabs">
-                    <div class="chat-tab active" data-tab="all">Все</div>
-                    <div class="chat-tab" data-tab="unread">Непрочитанные</div>
-                    <div class="chat-tab" data-tab="vip">VIP</div>
-                </div>
-            </div>
-            <div class="chat-list" id="chat-list"></div>
-        </div>
-
-        <main class="chat-area">
-            <div class="chat-top-bar">
-                <div class="chat-top-avatar" id="chat-avatar">👤</div>
-                <div class="chat-top-info">
-                    <div class="chat-top-name" id="chat-name">Выберите чат</div>
-                    <div class="chat-top-status" id="chat-status">—</div>
-                </div>
-                <div class="encryption-badge">🔐 E2E</div>
-                <button class="icon-btn" id="refresh-chat-btn" title="Обновить чат из блокчейна" onclick="refreshCurrentChat()">🔄</button>
-                <button class="share-btn" id="share-profile-btn" title="Поделиться профилем" style="display:none;" onclick="openShareModal()">🔗</button>
-            </div>
-            <div class="messages-container" id="messages-container">
-                <div class="empty-state">
-                    <div class="empty-state-icon">💬</div>
-                    <h3>Добро пожаловать</h3>
-                    <p>Выберите чат и подключите кошелёк</p>
-                </div>
-            </div>
-            <div class="input-container">
-                <button class="icon-btn">📎</button>
-                <div class="input-wrapper">
-                    <input type="text" placeholder="Подключите кошелёк..." disabled id="msg-input">
-                    <button class="icon-btn">😊</button>
-                </div>
-                <button class="send-btn" disabled id="send-btn">➤</button>
-            </div>
-            <!-- Индикатор E2E -->
-            <div id="e2e-indicator" class="e2e-indicator">🔒 E2E Encrypted (tweetnacl)</div>
-        </main>
+  <!-- ─── Sidebar ─────────────────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-item user-avatar-btn" id="user-avatar-btn" style="display:none" onclick="toggleUserMenu()">
+      <span class="avatar-char" id="user-avatar-char">?</span>
+      <span>Аккаунт</span>
+      <div id="user-dropdown-menu" class="user-dropdown hidden" onclick="event.stopPropagation()">
+        <div class="user-dropdown-item" onclick="openProfileModal()">👤 Профиль</div>
+        <div class="user-dropdown-item" onclick="openContactsModal()">📇 Контакты</div>
+        <div class="user-dropdown-item" onclick="openSettingsModal()">⚙️ Настройки</div>
+        <div class="user-dropdown-item" id="admin-menu-item" style="display:none" onclick="openAdminModal()">🛡️ Админ</div>
+        <div class="user-dropdown-item danger" onclick="logout()">🚪 Выйти</div>
+      </div>
     </div>
 
-    <!-- Wallet Modal -->
-    <div id="wallet-modal" class="modal" style="display:none;">
-        <div class="modal-content">
-            <h3>🔗 Подключить кошелёк</h3>
-            <p>Для отправки сообщений нужен MetaMask</p>
-            <button id="connect-btn" class="btn-primary">Подключить MetaMask</button>
-            <p id="wallet-msg" class="status-msg"></p>
-            <button class="btn-secondary" onclick="closeModal('wallet-modal')">Закрыть</button>
-        </div>
+    <div class="sidebar-item active" data-folder="all" onclick="setFolder('all')">
+      <span>💬</span><span>Все</span>
+      <span class="sidebar-badge" id="all-badge" style="display:none"></span>
+    </div>
+    <div class="sidebar-item" data-folder="personal" onclick="setFolder('personal')">
+      <span>👤</span><span>Личное</span>
+      <span class="sidebar-badge" id="personal-badge" style="display:none"></span>
+    </div>
+    <div class="sidebar-item" data-folder="news" onclick="setFolder('news')">
+      <span>📰</span><span>Новости</span>
+      <span class="sidebar-badge" id="news-badge" style="display:none"></span>
+    </div>
+    <div class="sidebar-item" data-folder="work" onclick="setFolder('work')">
+      <span>💼</span><span>Работа</span>
+      <span class="sidebar-badge" id="work-badge" style="display:none"></span>
+    </div>
+    <div class="sidebar-item" id="admin-btn" style="display:none" onclick="openAdminModal()">
+      <span>🛡️</span><span>Админ</span>
+    </div>
+  </aside>
+
+  <!-- ─── Chat Panel ────────────────────────────────────────────────────── -->
+  <div class="chat-panel">
+    <div class="chat-header">
+      <div class="add-contact-box">
+        <input type="text" id="add-contact-input" placeholder="0xAddress или имя..."
+               onkeydown="if(event.key==='Enter')addContactFromInput()">
+        <button class="icon-btn" onclick="addContactFromInput()" title="Добавить контакт">➕</button>
+      </div>
+      <div class="search-box">
+        <span>🔍</span>
+        <input type="text" id="search-input" placeholder="Search" oninput="renderChatList()">
+      </div>
+      <div class="chat-tabs">
+        <div class="chat-tab active" data-tab="all"    onclick="setTab('all')">Все</div>
+        <div class="chat-tab"        data-tab="unread" onclick="setTab('unread')">Непрочитанные</div>
+        <div class="chat-tab"        data-tab="vip"    onclick="setTab('vip')">VIP</div>
+      </div>
+    </div>
+    <div class="chat-list" id="chat-list"></div>
+  </div>
+
+  <!-- ─── Chat Area ─────────────────────────────────────────────────────── -->
+  <main class="chat-area">
+    <div class="chat-top-bar">
+      <div class="chat-top-avatar" id="chat-avatar">💬</div>
+      <div class="chat-top-info">
+        <div class="chat-top-name" id="chat-name">Выберите чат</div>
+        <div class="chat-top-status" id="chat-status">—</div>
+      </div>
+      <div class="encryption-badge" title="AES-256-GCM шифрование">🔐 AES-256</div>
+      <button class="icon-btn" title="Обновить чат" onclick="refreshCurrentChat()">🔄</button>
+      <button class="share-btn" id="share-profile-btn" style="display:none" title="Поделиться профилем" onclick="openShareModal()">🔗</button>
     </div>
 
-    <!-- Register Modal -->
-    <div id="register-modal" class="modal" style="display:none;">
-        <div class="modal-content">
-            <div class="register-avatar-placeholder">👤</div>
-            <h3>🚀 Создать профиль</h3>
-            <p>Новый кошелёк! Придумайте никнейм — это ваше имя в Web3 Messenger.</p>
-            <div class="register-address" id="register-address-display"></div>
-            <input type="text" id="register-username" class="input-field" placeholder="Ваш никнейм (мин. 3 символа)" maxlength="32" oninput="this.value = this.value.replace(/\s/g, '')">
-            <p class="register-hint">Только буквы, цифры и _ · Аватар можно добавить позже через IPFS</p>
-            <button id="register-btn" class="btn-primary" onclick="registerUser()">✅ Зарегистрироваться в Polygon</button>
-            <p id="register-msg" class="status-msg"></p>
-            <button class="btn-secondary" onclick="closeRegisterModal()">Пропустить</button>
-        </div>
+    <div class="messages-container" id="messages-container">
+      <div class="empty-state">
+        <div class="empty-state-icon">💬</div>
+        <h3>Добро пожаловать</h3>
+        <p>Выберите чат и подключите кошелёк</p>
+        <button class="btn-primary" style="margin-top:20px" onclick="openModal('wallet-modal')">Подключить MetaMask</button>
+      </div>
     </div>
 
-    <!-- Admin Modal: Key Escrow -->
-    <div id="admin-modal" class="modal" style="display:none;">
-        <div class="modal-content">
-            <h3>🛡️ Админ-панель: Key Escrow</h3>
-            <p>Доступ только для владельца. Введите адрес пользователя для извлечения зашифрованного мастер-ключа.</p>
-            <input type="text" id="escrow-user-address" placeholder="0x..." class="input-field">
-            <button id="btn-access-escrow" class="btn-primary" onclick="accessEscrowKey()">🔓 Получить доступ к ключу</button>
-            <div id="escrow-status" class="status-msg" style="display:none;"></div>
-            <button class="btn-secondary" onclick="closeModal('admin-modal')">Закрыть</button>
-        </div>
+    <div class="input-container">
+      <button class="icon-btn">📎</button>
+      <div class="input-wrapper">
+        <input type="text" id="msg-input" placeholder="🔗 Подключите кошелёк..." disabled
+               onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}">
+        <button class="icon-btn">😊</button>
+      </div>
+      <button class="send-btn" id="send-btn" disabled onclick="sendMessage()">➤</button>
     </div>
+  </main>
+</div>
 
-    <!-- Share Profile Modal -->
-    <div id="share-modal" class="modal" style="display:none;">
-        <div class="modal-content">
-            <h3>🔗 Поделиться профилем</h3>
-            <p>Отправьте ссылку или отсканируйте QR-код</p>
-            <div class="qr-container" id="qr-container"></div>
-            <div class="share-link-box">
-                <input type="text" id="share-link-input" readonly class="share-link">
-                <button class="copy-btn" onclick="copyShareLink()">📋</button>
-            </div>
-            <div class="share-buttons">
-                <button class="share-btn-telegram" onclick="shareToTelegram()"><span>✈️</span> Telegram</button>
-                <button class="share-btn-whatsapp" onclick="shareToWhatsApp()"><span>💬</span> WhatsApp</button>
-                <button class="share-btn-twitter" onclick="shareToTwitter()"><span>🐦</span> Twitter</button>
-            </div>
-            <button class="btn-secondary" onclick="closeModal('share-modal')">Закрыть</button>
-        </div>
+<!-- ─── Wallet Modal ──────────────────────────────────────────────────────── -->
+<div id="wallet-modal" class="modal" style="display:none" onclick="closeModalOnBg(event,'wallet-modal')">
+  <div class="modal-content">
+    <h3>🔗 Подключить кошелёк</h3>
+    <p>Для отправки сообщений нужен MetaMask</p>
+    <button id="connect-btn" class="btn-primary" onclick="connectWallet()">Подключить MetaMask</button>
+    <p id="wallet-msg" class="status-msg"></p>
+    <button class="btn-secondary" onclick="closeModal('wallet-modal')">Закрыть</button>
+  </div>
+</div>
+
+<!-- ─── Register Modal ────────────────────────────────────────────────────── -->
+<div id="register-modal" class="modal" style="display:none">
+  <div class="modal-content">
+    <div class="register-avatar-placeholder">👤</div>
+    <h3>🚀 Создать профиль</h3>
+    <p>Новый кошелёк! Придумайте никнейм — это ваше имя в Web3 Messenger.</p>
+    <div class="register-address" id="register-address-display"></div>
+    <input type="text" id="register-username" class="input-field"
+           placeholder="Ваш никнейм (мин. 3 символа)" maxlength="32"
+           oninput="this.value=this.value.replace(/\s/g,'')"
+           onkeydown="if(event.key==='Enter')registerUser()">
+    <p class="register-hint">Только буквы, цифры и _ · Аватар можно добавить позже через IPFS</p>
+    <button id="register-btn" class="btn-primary" onclick="registerUser()">✅ Зарегистрироваться в Polygon</button>
+    <p id="register-msg" class="status-msg"></p>
+    <button class="btn-secondary" onclick="closeRegisterModal()">Пропустить</button>
+  </div>
+</div>
+
+<!-- ─── Admin Modal ───────────────────────────────────────────────────────── -->
+<div id="admin-modal" class="modal" style="display:none" onclick="closeModalOnBg(event,'admin-modal')">
+  <div class="modal-content">
+    <h3>🛡️ Админ-панель: Key Escrow</h3>
+    <p>Доступ только для владельца. Введите адрес пользователя для извлечения зашифрованного мастер-ключа.</p>
+    <input type="text" id="escrow-user-address" placeholder="0x..." class="input-field">
+    <button class="btn-primary" onclick="accessEscrowKey()">🔓 Получить доступ к ключу</button>
+    <div id="escrow-status" class="status-msg" style="display:none"></div>
+    <button class="btn-secondary" onclick="closeModal('admin-modal')">Закрыть</button>
+  </div>
+</div>
+
+<!-- ─── Share Modal ───────────────────────────────────────────────────────── -->
+<div id="share-modal" class="modal" style="display:none" onclick="closeModalOnBg(event,'share-modal')">
+  <div class="modal-content">
+    <h3>🔗 Поделиться профилем</h3>
+    <p>Отправьте ссылку или отсканируйте QR-код</p>
+    <div class="qr-container" id="qr-container"></div>
+    <div class="share-link-box">
+      <input type="text" id="share-link-input" readonly class="share-link">
+      <button class="copy-btn" onclick="copyShareLink()">📋</button>
     </div>
-
-    <!-- Settings Modal -->
-    <div id="settingsModal" class="modal" style="display:none;">
-        <div class="modal-content">
-            <h3>⚙️ Настройки</h3>
-            <div class="mb-5">
-                <label class="text-zinc-400 text-xs mb-1.5 block">Сеть</label>
-                <select id="settingsNetwork" onchange="wallet.changeNetwork(parseInt(this.value))" class="input-field">
-                    <option value="137">Polygon</option>
-                    <option value="1">Ethereum Mainnet</option>
-                    <option value="56">BSC</option>
-                    <option value="5">Goerli Testnet</option>
-                    <option value="80001">Mumbai Testnet</option>
-                </select>
-            </div>
-            <div class="h-px bg-white/8 my-4"></div>
-            <div class="mb-4">
-                <div class="flex justify-between items-center mb-2">
-                    <label class="text-zinc-400 text-xs">Приватный ключ</label>
-                    <button id="pkShowBtn" onclick="exportPrivateKey()" class="text-xs text-yellow-400 hover:text-yellow-300 transition">Показать ↓</button>
-                </div>
-                <div id="pkSection" class="hidden">
-                    <div class="relative mb-2">
-                        <input type="password" id="pkInput" readonly class="input-field pr-16 font-mono text-xs">
-                        <button onclick="togglePkVisibility()" id="pkToggleBtn" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-400 hover:text-white transition">Показать</button>
-                    </div>
-                    <button onclick="copyPrivateKey()" class="text-xs text-zinc-500 hover:text-yellow-400 transition">📋 Копировать приватный ключ</button>
-                </div>
-            </div>
-            <div id="mnemonicSettingsGroup" class="hidden mb-4">
-                <label class="text-zinc-400 text-xs mb-1.5 block">Seed-фраза</label>
-                <input type="text" id="mnemonicInputSettings" readonly class="input-field font-mono text-xs mb-2">
-                <button onclick="copyMnemonicSettings()" class="text-xs text-zinc-500 hover:text-yellow-400 transition">📋 Копировать seed-фразу</button>
-            </div>
-            <div class="h-px bg-white/8 my-4"></div>
-            <button onclick="showModal('changePasswordModal')" class="w-full py-3.5 glass border border-white/10 hover:border-white/20 rounded-2xl text-sm transition mb-3">
-                🔒 Сменить пароль
-            </button>
-            <button onclick="clearAllData()" class="w-full py-3.5 bg-red-500/8 hover:bg-red-500/12 border border-red-500/20 text-red-400 rounded-2xl text-sm transition">
-                🗑️ Сбросить все данные
-            </button>
-            <button class="btn-secondary" onclick="closeModal('settingsModal')">Закрыть</button>
-        </div>
+    <div class="share-buttons">
+      <button class="share-btn-telegram" onclick="shareToTelegram()"><span>✈️</span> Telegram</button>
+      <button class="share-btn-whatsapp" onclick="shareToWhatsApp()"><span>💬</span> WhatsApp</button>
+      <button class="share-btn-twitter"  onclick="shareToTwitter()"><span>🐦</span> Twitter</button>
     </div>
+    <button class="btn-secondary" onclick="closeModal('share-modal')">Закрыть</button>
+  </div>
+</div>
 
-    <!-- Change Password Modal -->
-    <div id="changePasswordModal" class="modal" style="display:none;">
-        <div class="modal-content">
-            <div class="flex justify-between items-center mb-5">
-                <h3 class="text-lg font-bold">Сменить пароль</h3>
-                <button onclick="closeModal('changePasswordModal')" class="text-zinc-500 hover:text-white text-2xl leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition">&times;</button>
-            </div>
-            <div class="mb-3">
-                <label class="text-zinc-400 text-xs mb-1.5 block">Текущий пароль</label>
-                <input type="password" id="currentPasswordInput" class="input-field" placeholder="••••••••">
-            </div>
-            <div class="mb-3">
-                <label class="text-zinc-400 text-xs mb-1.5 block">Новый пароль</label>
-                <input type="password" id="newPasswordChangeInput" class="input-field" placeholder="••••••••">
-            </div>
-            <div class="mb-5">
-                <label class="text-zinc-400 text-xs mb-1.5 block">Подтвердите пароль</label>
-                <input type="password" id="confirmPasswordChangeInput" class="input-field" placeholder="••••••••" onkeypress="if(event.key==='Enter')wallet.changePasswordWithUI()">
-            </div>
-            <button onclick="wallet.changePasswordWithUI()" class="w-full py-4 bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-bold rounded-2xl transition">
-                Сменить пароль
-            </button>
-        </div>
+<!-- ─── Profile Modal ────────────────────────────────────────────────────── -->
+<div id="profile-modal" class="modal" style="display:none" onclick="closeModalOnBg(event,'profile-modal')">
+  <div class="modal-content">
+    <h3>👤 Профиль</h3>
+    <div class="profile-info">
+      <div class="profile-avatar">👤</div>
+      <p style="color:#9ca3af;font-size:12px;margin-bottom:4px">Адрес:</p>
+      <p id="profile-address-display"
+         style="font-family:monospace;font-size:11px;word-break:break-all;background:var(--bg-tertiary);padding:8px;border-radius:8px;margin-bottom:12px"></p>
+      <p><span style="color:#9ca3af">Никнейм:</span> <span id="profile-username-display">—</span></p>
     </div>
+    <button class="btn-secondary" onclick="closeModal('profile-modal')">Закрыть</button>
+  </div>
+</div>
 
-    <!-- Profile Modal -->
-    <div id="profile-modal" class="modal" style="display:none;">
-        <div class="modal-content">
-            <h3>👤 Профиль</h3>
-            <div class="profile-info">
-                <div class="profile-avatar">👤</div>
-                <p class="text-sm"><span class="text-zinc-400">Адрес:</span> <span id="profile-address" class="font-mono">—</span></p>
-                <p class="text-sm"><span class="text-zinc-400">Никнейм:</span> <span id="profile-username">—</span></p>
-            </div>
-            <button class="btn-secondary" onclick="closeModal('profile-modal')">Закрыть</button>
-        </div>
+<!-- ─── Contacts Modal ────────────────────────────────────────────────────── -->
+<div id="contacts-modal" class="modal" style="display:none" onclick="closeModalOnBg(event,'contacts-modal')">
+  <div class="modal-content">
+    <h3>📇 Контакты</h3>
+    <div class="contacts-list" id="contacts-list"></div>
+    <button class="btn-secondary" onclick="closeModal('contacts-modal')">Закрыть</button>
+  </div>
+</div>
+
+<!-- ─── Settings Modal ────────────────────────────────────────────────────── -->
+<div id="settings-modal" class="modal" style="display:none" onclick="closeModalOnBg(event,'settings-modal')">
+  <div class="modal-content">
+    <h3>⚙️ Настройки</h3>
+    <div style="margin-bottom:16px;text-align:left">
+      <label style="color:#9ca3af;font-size:12px;display:block;margin-bottom:6px">Сеть</label>
+      <select class="input-field">
+        <option value="137">Polygon</option>
+        <option value="1">Ethereum Mainnet</option>
+        <option value="56">BSC</option>
+      </select>
     </div>
-
-    <!-- Contacts Modal -->
-    <div id="contacts-modal" class="modal" style="display:none;">
-        <div class="modal-content">
-            <h3>📇 Контакты</h3>
-            <div id="contacts-list" class="contacts-list"></div>
-            <button class="btn-secondary" onclick="closeModal('contacts-modal')">Закрыть</button>
-        </div>
+    <div style="height:1px;background:rgba(255,255,255,0.08);margin:16px 0"></div>
+    <div style="margin-bottom:16px;text-align:left">
+      <label style="color:#9ca3af;font-size:12px;display:block;margin-bottom:6px">Контракты</label>
+      <div style="font-size:11px;font-family:monospace;color:#6b7280;word-break:break-all;line-height:2">
+        <div>Identity: 0xcFcA16C8c38a83a71936395039757DcFF6040c1E</div>
+        <div>Messages: 0x906DCA5190841d5F0acF8244bd8c176ecb24139D</div>
+        <div>Network: Polygon (Chain 137)</div>
+      </div>
     </div>
+    <div style="height:1px;background:rgba(255,255,255,0.08);margin:16px 0"></div>
+    <button onclick="clearAllData()"
+            style="width:100%;padding:12px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);color:#ef4444;border-radius:8px;cursor:pointer;font-size:14px;margin-bottom:8px">
+      🗑️ Сбросить все данные
+    </button>
+    <button class="btn-secondary" onclick="closeModal('settings-modal')">Закрыть</button>
+  </div>
+</div>
 
-    <script src="js/app.js"></script>
-    <script>
-        // Подставляем адрес кошелька в форму регистрации
-        document.addEventListener('DOMContentLoaded', () => {
-            const orig = window.openRegisterModal;
-            window.openRegisterModal = function() {
-                orig && orig();
-                const el = document.getElementById('register-address-display');
-                if (el && window.userAddress) el.textContent = window.userAddress;
-            };
-        });
-    </script>
+<!-- ─── Toast Container ───────────────────────────────────────────────────── -->
+<div class="toast-container" id="toast-container"></div>
+
+<script src="app.js"></script>
 </body>
 </html>
