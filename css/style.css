@@ -403,13 +403,6 @@ svg { display:block; }
   align-self: flex-start;
 }
 
-/* Sender name above received (group-chat style) */
-.message.received .msg-sender {
-  font-size:11px; color:var(--accent);
-  font-weight:600; margin-bottom:2px; padding-left:12px;
-  display:none;
-}
-
 /* The bubble itself */
 .msg-bubble {
   padding: 8px 12px 6px;
@@ -446,12 +439,6 @@ svg { display:block; }
   clip-path: polygon(100% 0, 0 100%, 100% 100%);
   border-radius:0 0 0 2px;
 }
-
-/* Consecutive messages — remove tail except last */
-.message.sent  + .message.sent  .msg-bubble { border-radius:18px 18px 4px 18px; }
-.message.sent  + .message.sent  .msg-bubble::after { display:none; }
-.message.received + .message.received .msg-bubble { border-radius:18px 18px 18px 4px; }
-.message.received + .message.received .msg-bubble::after { display:none; }
 
 .msg-text { font-size:14px; line-height:1.45; }
 
