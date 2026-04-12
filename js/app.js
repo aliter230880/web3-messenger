@@ -1,5 +1,5 @@
-// Web3 Messenger v8.2 — Telegram UI + E2E (tweetnacl, cached keys)
-console.log('🚀 Web3 Messenger v8.2 (Telegram UI + E2E)');
+// Web3 Messenger v8.2.1 — Telegram UI + E2E (tweetnacl, cached keys, fixed decrypt)
+console.log('🚀 Web3 Messenger v8.2.1 (Telegram UI + E2E)');
 
 if (typeof ethers === 'undefined') console.error('❌ ethers.js не загружен!');
 if (typeof nacl === 'undefined') console.error('❌ tweetnacl не загружен!');
@@ -75,42 +75,73 @@ function avatarEl(chat, size = 46) {
   return div;
 }
 
-// ─── E2E Шифрование (tweetnacl) с кэшированием ────────────────────────────────
+// ─── E2E Шифрование (tweetnacl) с кэшированием и отладкой ─────────────────────
 const sharedKeyCache = new Map();
 async function getSharedKey(peer) {
   if (!signer) throw new Error('Signer not available');
   const addresses = [userAddress.toLowerCase(), peer.toLowerCase()].sort();
   const cacheKey = addresses.join(':');
-  if (sharedKeyCache.has(cacheKey)) return sharedKeyCache.get(cacheKey);
+  if (sharedKeyCache.has(cacheKey)) {
+    console.log('🔑 [key] cache hit for', cacheKey);
+    return sharedKeyCache.get(cacheKey);
+  }
   const messageToSign = `chat-key-v1:${cacheKey}`;
+  console.log('🔐 [key] requesting signature for', messageToSign);
   const signature = await signer.signMessage(messageToSign);
   const hash = ethers.utils.keccak256(signature);
   const key = ethers.utils.arrayify(hash);
   sharedKeyCache.set(cacheKey, key);
+  console.log('✅ [key] generated and cached for', cacheKey);
   return key;
 }
+
 async function encrypt(text, peer) {
   const key = await getSharedKey(peer);
   const nonce = nacl.randomBytes(nacl.secretbox.nonceLength);
   const messageBytes = new TextEncoder().encode(text);
   const encrypted = nacl.secretbox(messageBytes, nonce, key);
   const combined = new Uint8Array(nonce.length + encrypted.length);
-  combined.set(nonce); combined.set(encrypted, nonce.length);
-  return btoa(String.fromCharCode(...combined));
+  combined.set(nonce);
+  combined.set(encrypted, nonce.length);
+  const base64 = btoa(String.fromCharCode(...combined));
+  console.log('🔒 [encrypt] nonce length:', nonce.length, 'encrypted length:', encrypted.length, 'base64 preview:', base64.slice(0, 30)+'...');
+  return base64;
 }
-function isValidBase64(str) { try { atob(str); return true; } catch { return false; } }
+
+function isValidBase64(str) {
+  if (!str || typeof str !== 'string') return false;
+  try { atob(str); return true; } catch { return false; }
+}
+
 async function decryptWithKey(encBase64, key) {
-  if (!isValidBase64(encBase64)) return encBase64;
+  // Если не похоже на base64, возвращаем как есть (plaintext)
+  if (!isValidBase64(encBase64)) {
+    console.log('📄 [decrypt] not base64, returning as plaintext');
+    return encBase64;
+  }
   try {
     const combined = Uint8Array.from(atob(encBase64), c => c.charCodeAt(0));
     const nonce = combined.slice(0, nacl.secretbox.nonceLength);
     const box = combined.slice(nacl.secretbox.nonceLength);
+    console.log('🔓 [decrypt] nonce length:', nonce.length, 'box length:', box.length);
     const dec = nacl.secretbox.open(box, nonce, key);
-    return dec ? new TextDecoder().decode(dec) : encBase64;
-  } catch { return encBase64; }
+    if (dec) {
+      const text = new TextDecoder().decode(dec);
+      console.log('✅ [decrypt] success, text preview:', text.slice(0, 30));
+      return text;
+    } else {
+      console.warn('⚠️ [decrypt] secretbox.open returned null (wrong key or corrupted data)');
+      return encBase64; // возвращаем зашифрованную строку, чтобы было видно проблему
+    }
+  } catch (e) {
+    console.error('❌ [decrypt] error:', e.message);
+    return encBase64;
+  }
 }
+
 async function decrypt(encBase64, sender) {
-  try { const key = await getSharedKey(sender); return await decryptWithKey(encBase64, key); } catch { return encBase64; }
+  try { const key = await getSharedKey(sender); return await decryptWithKey(encBase64, key); }
+  catch { return encBase64; }
 }
 
 // ─── Утилиты ─────────────────────────────────────────────────────────────────
@@ -235,10 +266,12 @@ async function loadMessages(chatId, start = 0) {
   if (!signer || !userAddress) return;
   if (!ethers.utils.isAddress(chatId)) return;
   try {
+    console.log('📥 [loadMessages] loading chat', chatId, 'start', start);
     const key = await getSharedKey(chatId);
     const contract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
     const [sent, received] = await contract.getConversation(userAddress, chatId, start, MESSAGES_PER_PAGE);
     const all = [...sent, ...received].sort((a,b) => a.timestamp - b.timestamp);
+    console.log(`📬 [loadMessages] got ${all.length} messages`);
     let chat = getChatById(chatId);
     if (!chat) {
       if (deletedChatsStore.has(chatId)) return;
@@ -251,15 +284,31 @@ async function loadMessages(chatId, start = 0) {
     const msgs = await Promise.all(all.map(async m => {
       const isSent = m.sender.toLowerCase() === userAddress.toLowerCase();
       let text = m.text;
-      if (!isSent) text = await decryptWithKey(m.text, key);
-      return { id: m.timestamp.toString()+m.sender, text, sent: isSent, time: new Date(m.timestamp*1000).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}), signature: m.signature, sender: m.sender, timestamp: m.timestamp, encrypted: true };
+      // Пытаемся расшифровать все сообщения, кроме тех, что уже в локальном кэше с пометкой encrypted:false
+      // Для надёжности проверяем, не является ли текст уже расшифрованным (не base64)
+      if (isValidBase64(m.text)) {
+        console.log(`🔄 [loadMessages] decrypting message from ${m.sender}`);
+        text = await decryptWithKey(m.text, key);
+      } else {
+        console.log(`📄 [loadMessages] message is plaintext, skipping decrypt`);
+      }
+      return {
+        id: m.timestamp.toString()+m.sender,
+        text,
+        sent: isSent,
+        time: new Date(m.timestamp*1000).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}),
+        signature: m.signature,
+        sender: m.sender,
+        timestamp: m.timestamp,
+        encrypted: isValidBase64(m.text) // если было base64, значит зашифровано
+      };
     }));
     if (start === 0) chat.messages = msgs; else chat.messages = [...msgs, ...chat.messages];
     store.pagination[chatId] = { offset: start + MESSAGES_PER_PAGE, hasMore: all.length === MESSAGES_PER_PAGE };
     if (msgs.length) { const last = msgs[msgs.length-1]; chat.preview = last.text; chat.time = last.time; }
     renderChatList();
     if (store.currentChat === chatId) renderMessages();
-  } catch(e) { console.warn('loadMessages:', e); }
+  } catch(e) { console.error('loadMessages error:', e); }
 }
 async function sendMessage() {
   const input = document.getElementById('msg-input');
@@ -268,6 +317,7 @@ async function sendMessage() {
   if (!ethers.utils.isAddress(store.currentChat)) { showToast('❌ Некорректный адрес', 'error'); return; }
   const btn = document.getElementById('send-btn'); btn.disabled = input.disabled = true;
   try {
+    console.log('📤 [sendMessage] encrypting for', store.currentChat);
     const enc = await encrypt(text, store.currentChat);
     const sig = await signer.signMessage(text);
     const c = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
@@ -384,11 +434,40 @@ function openProfileModal() {
   if (big && userAddress) { const bg = _colorFor(userAddress.toLowerCase()); big.style.background = bg; big.textContent = currentUsername ? _initials(currentUsername) : userAddress.slice(2,4).toUpperCase(); }
   openModal('profile-modal'); toggleUserMenu();
 }
-function openContactsModal() { /* ... рендер контактов ... */ openModal('contacts-modal'); }
+function openContactsModal() {
+  const el = document.getElementById('contacts-list');
+  if (!el) return;
+  if (!contactsStore.list.length) {
+    el.innerHTML = '<p style="text-align:center;color:var(--text-muted);padding:20px;font-size:13px">Нет контактов</p>';
+  } else {
+    el.innerHTML = contactsStore.list.map(c => `
+      <div class="contact-item">
+        <div class="contact-info">
+          <div class="contact-name">${escHtml(c.username||c.address.slice(0,8)+'…')}</div>
+          <div class="contact-addr">${c.address.slice(0,6)}...${c.address.slice(-4)}</div>
+        </div>
+        <div class="contact-actions">
+          <button class="contact-btn-chat" onclick="selectChat('${c.address}');closeModal('contacts-modal')">Чат</button>
+          <button class="contact-btn-del"  onclick="removeContact('${c.address}')">Удалить</button>
+        </div>
+      </div>`).join('');
+  }
+  openModal('contacts-modal');
+  toggleUserMenu();
+}
+function removeContact(addr) { contactsStore.remove(addr); openContactsModal(); renderChatList(); }
 function openSettingsModal() { openModal('settings-modal'); }
 function openAdminModal() { openModal('admin-modal'); }
 async function accessEscrowKey() { showToast('Заглушка', 'info'); }
-function openShareModal() { /* ... QR ... */ openModal('share-modal'); }
+function openShareModal() {
+  if (!userAddress) return;
+  const url = window.location.origin+'/?contact='+userAddress;
+  document.getElementById('share-link-input').value = url;
+  const qr = document.getElementById('qr-container');
+  qr.innerHTML='';
+  try { new QRCode(qr, { text:url, width:168, height:168 }); } catch {}
+  openModal('share-modal');
+}
 function copyShareLink() { navigator.clipboard?.writeText(document.getElementById('share-link-input').value); showToast('Скопировано', 'success'); }
 function shareToTelegram() { window.open(`https://t.me/share/url?url=${encodeURIComponent(document.getElementById('share-link-input').value)}`,'_blank'); }
 function shareToWhatsApp() { window.open(`https://wa.me/?text=${encodeURIComponent('Web3 Messenger: '+document.getElementById('share-link-input').value)}`,'_blank'); }
@@ -430,4 +509,4 @@ window.openSettingsModal = openSettingsModal; window.openAdminModal = openAdminM
 window.accessEscrowKey = accessEscrowKey; window.openShareModal = openShareModal;
 window.copyShareLink = copyShareLink; window.shareToTelegram = shareToTelegram;
 window.shareToWhatsApp = shareToWhatsApp; window.shareToTwitter = shareToTwitter;
-window.clearAllData = clearAllData;
+window.clearAllData = clearAllData; window.removeContact = removeContact;
