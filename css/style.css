@@ -1,4 +1,4 @@
-/* Web3 Messenger v8.1 — Shadcn/UI Inspired + E2E Encryption */
+/* Web3 Messenger v8.1.1 — Shadcn/UI Inspired Premium Theme */
 :root {
   --background: 0 0% 7%;
   --foreground: 0 0% 98%;
@@ -703,23 +703,6 @@ body {
 #global-toast.toast-success { border-color: hsl(var(--success)); color: hsl(var(--success)); }
 #global-toast.toast-error { border-color: hsl(var(--destructive)); color: hsl(var(--destructive)); }
 #global-toast.toast-info { border-color: hsl(var(--ring)); color: hsl(var(--ring)); }
-
-/* Encryption lock icon */
-.encrypted-lock {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  background: hsla(var(--success), 0.2);
-  border-radius: 50%;
-  font-size: 10px;
-  cursor: help;
-  margin-left: 4px;
-}
-.encrypted-lock:hover {
-  background: hsla(var(--success), 0.4);
-}
 
 /* Responsive */
 @media (max-width: 768px) {
