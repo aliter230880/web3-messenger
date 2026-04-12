@@ -10,70 +10,46 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl.min.js"></script>
   <link rel="stylesheet" href="css/style.css">
 </head>
-<body class="bg-zinc-950 text-white overflow-hidden">
-  <div class="app-container">
+<body class="bg-[#0a0e1a] text-white overflow-hidden h-screen flex flex-col">
+  <div class="flex flex-1 overflow-hidden">
     <!-- SIDEBAR -->
-    <div class="sidebar">
-      <div class="sidebar-item active" data-folder="all"><span>💬</span><span>Все</span></div>
-      <div class="sidebar-item" data-folder="personal"><span>👤</span><span>Личные</span></div>
-      <div class="sidebar-item" data-folder="work"><span>💼</span><span>Работа</span></div>
-      <div class="sidebar-item" data-folder="news"><span>📢</span><span>Новости</span></div>
+    <div class="w-16 bg-[#111827] flex flex-col items-center py-4 gap-6 border-r border-white/10">
+      <img src="logo.png" alt="Logo" class="w-10 h-10 rounded-2xl">
+      <div onclick="switchFolder('all')" class="sidebar-item active flex flex-col items-center cursor-pointer">
+        <span class="text-2xl">💬</span>
+        <span class="text-xs mt-1">Все</span>
+      </div>
+      <div onclick="switchFolder('personal')" class="sidebar-item flex flex-col items-center cursor-pointer">
+        <span class="text-2xl">👤</span>
+        <span class="text-xs mt-1">Личные</span>
+      </div>
+      <div onclick="switchFolder('work')" class="sidebar-item flex flex-col items-center cursor-pointer">
+        <span class="text-2xl">💼</span>
+        <span class="text-xs mt-1">Работа</span>
+      </div>
+      <div onclick="switchFolder('news')" class="sidebar-item flex flex-col items-center cursor-pointer">
+        <span class="text-2xl">📢</span>
+        <span class="text-xs mt-1">Новости</span>
+      </div>
     </div>
 
-    <!-- CHAT PANEL -->
-    <div class="chat-panel">
-      <div class="chat-header">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <img src="logo.png" alt="Logo" class="w-9 h-9 rounded-2xl">
-            <h1 class="text-2xl font-bold">Web3 Messenger</h1>
-          </div>
-          <button onclick="connectWallet()" id="connect-btn"
-            class="px-5 py-2 bg-yellow-400 text-zinc-900 font-semibold rounded-2xl text-sm">Подключить</button>
+    <!-- CHAT LIST PANEL -->
+    <div class="w-80 bg-[#111827] border-r border-white/10 flex flex-col">
+      <div class="p-4 border-b border-white/10 flex items-center justify-between">
+        <h1 class="text-2xl font-bold">Web3 Messenger</h1>
+        <button onclick="connectWallet()" id="connectBtn"
+          class="px-6 py-2 bg-yellow-400 hover:bg-yellow-300 text-zinc-900 font-semibold rounded-3xl text-sm transition">
+          Подключить
+        </button>
+      </div>
+
+      <div class="p-4">
+        <div class="flex gap-2">
+          <input id="addContactInput" type="text" placeholder="0x... добавить контакт"
+            class="flex-1 bg-[#1f2937] border border-white/10 rounded-2xl px-4 py-3 text-sm focus:outline-none">
+          <button onclick="addContact()" class="px-6 bg-white text-zinc-900 rounded-2xl font-medium">Добавить</button>
         </div>
       </div>
 
-      <div class="add-contact-box">
-        <input id="add-contact-input" type="text" placeholder="0x... добавить контакт" class="input-field">
-        <button onclick="addContactFromInput()" class="btn-primary">Добавить</button>
-      </div>
-
-      <div class="search-box">
-        <input id="search-input" type="text" placeholder="Поиск чатов..." class="input-field">
-      </div>
-
-      <div id="chat-list" class="chat-list"></div>
-    </div>
-
-    <!-- CHAT AREA -->
-    <div class="chat-area">
-      <div id="chat-top-bar" class="chat-top-bar">
-        <div id="chat-avatar" class="chat-top-avatar">👤</div>
-        <div class="chat-top-info">
-          <div id="chat-name" class="chat-top-name">Выберите чат</div>
-          <div id="chat-status" class="chat-top-status">—</div>
-        </div>
-        <button onclick="openShareModal()" class="share-btn">🔗</button>
-      </div>
-
-      <div id="messages-container" class="messages-container"></div>
-
-      <div class="input-container">
-        <div class="input-wrapper">
-          <input id="msg-input" type="text" placeholder="Написать сообщение..." onkeypress="if(event.key==='Enter') sendMessage()">
-        </div>
-        <button id="send-btn" onclick="sendMessage()" class="send-btn">➤</button>
-      </div>
-
-      <div class="flex items-center justify-center text-[10px] text-emerald-400 gap-1 py-2">
-        <span>🔐</span> E2E Encrypted (tweetnacl)
-      </div>
-    </div>
-  </div>
-
-  <!-- Модалки и остальной HTML из вашего предыдущего кода (регистрация, профиль, контакты и т.д.) остаются без изменений -->
-  <!-- ... (ваши модалки) ... -->
-
-  <script src="js/app.js"></script>
-</body>
-</html>
+      <div class="px-4 pb-4">
+        <input id="searchInput" type="text" placeholder="По
