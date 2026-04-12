@@ -1,5 +1,5 @@
-// Web3 Messenger v8.1 — Deterministic E2E Encryption (EIP-191)
-console.log('🚀 Web3 Messenger v8.1');
+// Web3 Messenger v8.1.1 — Stable version (encryption temporarily disabled)
+console.log('🚀 Web3 Messenger v8.1.1');
 
 if (typeof ethers === 'undefined') console.error('❌ ethers.js missing');
 
@@ -29,8 +29,8 @@ let provider, signer, userAddress, isAdmin = false, currentUsername = '';
 let isInitializing = false;
 let autoRefreshInterval, discoveryInterval;
 
-// Крипто-состояние
-let userCryptoKeys = null; // { privateKey: CryptoKey, publicKey: CryptoKey, publicKeyRaw: Uint8Array }
+// Шифрование временно отключено для стабильности
+let userCryptoKeys = null;
 const KEY_DERIVATION_MESSAGE = "Generate encryption key for Web3 Messenger v1";
 
 const contactsStore = {
@@ -66,105 +66,6 @@ let lastScannedBlock = 0;
 let isLoadingMore = false;
 let lastRenderedMessagesHash = '';
 let lastRenderedChatListHash = '';
-
-// ---------- КРИПТОГРАФИЧЕСКИЙ МОДУЛЬ (Детерминированные ключи EIP-191) ----------
-async function deriveUserKeys(wallet) {
-    const signature = await wallet.signMessage(KEY_DERIVATION_MESSAGE);
-    const hash = ethers.utils.sha256(ethers.utils.toUtf8Bytes(signature));
-    const privateKeyBytes = ethers.utils.arrayify(hash);
-    
-    const privateKey = await crypto.subtle.importKey(
-        "raw",
-        privateKeyBytes,
-        { name: "ECDH", namedCurve: "P-256" },
-        false,
-        ["deriveBits"]
-    );
-    
-    const publicKey = await crypto.subtle.exportKey("raw", await crypto.subtle.deriveBits(
-        { name: "ECDH", public: await crypto.subtle.importKey("raw", privateKeyBytes, { name: "ECDH", namedCurve: "P-256" }, true, []) },
-        privateKey,
-        256
-    ));
-    
-    return {
-        privateKey,
-        publicKey: await crypto.subtle.importKey("raw", publicKey, { name: "ECDH", namedCurve: "P-256" }, true, []),
-        publicKeyRaw: new Uint8Array(publicKey)
-    };
-}
-
-async function getRecipientPublicKey(address) {
-    try {
-        const contract = new ethers.Contract(KEY_REGISTRY_ADDRESS, KEY_REGISTRY_ABI, provider);
-        const keyBytes = await contract.getPublicKey(address);
-        if (!keyBytes || keyBytes === '0x') return null;
-        const raw = ethers.utils.arrayify(keyBytes);
-        return await crypto.subtle.importKey("raw", raw, { name: "ECDH", namedCurve: "P-256" }, true, []);
-    } catch { return null; }
-}
-
-async function encryptMessage(plaintext, recipientPublicKey) {
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const ephemeralKeyPair = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
-    const ephemeralPublicRaw = await crypto.subtle.exportKey("raw", ephemeralKeyPair.publicKey);
-    
-    const sharedSecret = await crypto.subtle.deriveBits(
-        { name: "ECDH", public: recipientPublicKey },
-        ephemeralKeyPair.privateKey,
-        256
-    );
-    
-    const aesKey = await crypto.subtle.importKey("raw", sharedSecret, { name: "AES-GCM" }, false, ["encrypt"]);
-    const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, aesKey, new TextEncoder().encode(plaintext));
-    
-    return {
-        version: 1,
-        ephemeralPublic: ethers.utils.hexlify(new Uint8Array(ephemeralPublicRaw)),
-        iv: ethers.utils.hexlify(iv),
-        ciphertext: ethers.utils.hexlify(new Uint8Array(ciphertext))
-    };
-}
-
-async function decryptMessage(encryptedData, userPrivateKey) {
-    try {
-        const data = JSON.parse(encryptedData);
-        if (data.version !== 1) throw new Error('Unsupported version');
-        
-        const ephemeralPublicRaw = ethers.utils.arrayify(data.ephemeralPublic);
-        const ephemeralPublic = await crypto.subtle.importKey("raw", ephemeralPublicRaw, { name: "ECDH", namedCurve: "P-256" }, true, []);
-        
-        const sharedSecret = await crypto.subtle.deriveBits(
-            { name: "ECDH", public: ephemeralPublic },
-            userPrivateKey,
-            256
-        );
-        
-        const aesKey = await crypto.subtle.importKey("raw", sharedSecret, { name: "AES-GCM" }, false, ["decrypt"]);
-        const iv = ethers.utils.arrayify(data.iv);
-        const ciphertext = ethers.utils.arrayify(data.ciphertext);
-        
-        const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, aesKey, ciphertext);
-        return new TextDecoder().decode(decrypted);
-    } catch (e) {
-        console.warn('Decryption failed', e);
-        return null;
-    }
-}
-
-// ---------- Инициализация ----------
-document.addEventListener('DOMContentLoaded', async () => {
-    contactsStore.load();
-    deletedChatsStore.load();
-    try { const sb = localStorage.getItem('wm_lastBlock'); if (sb) lastScannedBlock = parseInt(sb); } catch(e){}
-    renderSidebar();
-    renderChatList();
-    setupListeners();
-    updateUI();
-    checkWallet();
-    handleContactParam();
-    initInfiniteScroll();
-});
 
 // ---------- Вспомогательные функции ----------
 function escapeHtml(text) { const d = document.createElement('div'); d.textContent = text; return d.innerHTML; }
@@ -283,15 +184,13 @@ function renderMessages() {
         <div class="date-separator"><span>Последние сообщения</span></div>
         ${chat.messages.map(m => {
             let textDisplay = m.text;
-            let isEncrypted = false;
-            try { const p = JSON.parse(m.text); if (p.version && p.ciphertext) { textDisplay = '🔒 Зашифрованное сообщение'; isEncrypted = true; } } catch(e){}
+            // Шифрование отключено, всегда показываем открытый текст
             return `
                 <div class="message ${m.sent ? 'sent' : 'received'}">
                     <div class="message-text">${escapeHtml(textDisplay)}</div>
                     <div class="message-meta">
                         <span>${m.time}</span>
                         ${m.sent ? `<span>${m.status==='delivered'?'✓✓':'⏳'}</span>`:''}
-                        ${isEncrypted ? '<span class="encrypted-lock" title="Защищено сквозным шифрованием">🔒</span>' : ''}
                         ${m.signature ? `<span class="sig-badge" onclick="verifySignature('${m.id}')" title="Подписано">🔐</span>`:''}
                     </div>
                 </div>
@@ -344,24 +243,16 @@ async function loadMessagesForChat(chatId, start = 0) {
             chat = { id: counterparty, name, avatar: '👤', online: false, folder: 'personal', messages: [], isContact: true };
             store.chats.push(chat);
         }
-        const formatted = [];
-        for (const m of all) {
-            let text = m.text;
-            if (userCryptoKeys && m.sender.toLowerCase() !== userAddress.toLowerCase()) {
-                const decrypted = await decryptMessage(m.text, userCryptoKeys.privateKey);
-                if (decrypted) text = decrypted;
-            }
-            formatted.push({
-                id: m.timestamp.toString()+m.sender,
-                text: text,
-                sent: m.sender.toLowerCase() === userAddress.toLowerCase(),
-                time: formatTime(m.timestamp),
-                status: 'delivered',
-                signature: m.signature,
-                sender: m.sender,
-                timestamp: m.timestamp
-            });
-        }
+        const formatted = all.map(m => ({
+            id: m.timestamp.toString()+m.sender,
+            text: m.text,
+            sent: m.sender.toLowerCase() === userAddress.toLowerCase(),
+            time: formatTime(m.timestamp),
+            status: 'delivered',
+            signature: m.signature,
+            sender: m.sender,
+            timestamp: m.timestamp
+        }));
         if (start === 0) chat.messages = formatted;
         else chat.messages = [...formatted, ...chat.messages];
         store.pagination[chatId] = { offset: start + MESSAGES_PER_PAGE, hasMore: all.length === MESSAGES_PER_PAGE };
@@ -435,16 +326,9 @@ async function initWallet() {
         updateUI();
         await checkRegistration();
         
-        // Инициализация крипто-ключей
-        showToast('Генерация ключей шифрования...', 'info');
-        userCryptoKeys = await deriveUserKeys(signer);
-        const keyRegistry = new ethers.Contract(KEY_REGISTRY_ADDRESS, KEY_REGISTRY_ABI, signer);
-        const existingKey = await keyRegistry.getPublicKey(userAddress);
-        if (!existingKey || existingKey === '0x') {
-            const tx = await keyRegistry.setPublicKey(ethers.utils.hexlify(userCryptoKeys.publicKeyRaw));
-            await tx.wait();
-            showToast('Ключ шифрования сохранён в блокчейне', 'success');
-        }
+        // Крипто-инициализация временно отключена
+        // userCryptoKeys = await deriveUserKeys(signer);
+        // ... отправка ключа в KeyRegistry ...
         
         startAutoRefresh();
         startDiscovery();
@@ -506,7 +390,7 @@ async function registerUser() {
     }
 }
 
-// ---------- Отправка сообщений (с шифрованием) ----------
+// ---------- Отправка сообщений (без шифрования) ----------
 async function signMessage(text) { return await signer.signMessage(text); }
 
 async function sendMessage() {
@@ -521,16 +405,9 @@ async function sendMessage() {
     btn.disabled = true;
     input.disabled = true;
     try {
-        let textToSend = plaintext;
-        // Шифруем, если есть ключ получателя
-        const recipientPubKey = await getRecipientPublicKey(recipient);
-        if (recipientPubKey && userCryptoKeys) {
-            const encrypted = await encryptMessage(plaintext, recipientPubKey);
-            textToSend = JSON.stringify(encrypted);
-        }
-        const sig = await signMessage(textToSend);
+        const sig = await signMessage(plaintext);
         const c = new ethers.Contract(MESSAGE_ADDRESS, MESSAGE_ABI, signer);
-        const tx = await c.sendMessage(recipient, textToSend, sig);
+        const tx = await c.sendMessage(recipient, plaintext, sig);
         showToast('📤 Транзакция отправлена', 'info');
         await tx.wait();
         input.value = '';
