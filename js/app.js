@@ -32,7 +32,6 @@ let autoRefreshInterval, discoveryInterval;
 let lastScannedBlock = 0;
 
 // Session Key Storage (In-Memory for active session)
-// Structure: { "userAddress": Uint8Array(32) }
 const sessionKeys = new Map();
 
 // Stores
@@ -108,9 +107,6 @@ function avatarEl(chat, size = 46) {
 
 // ─── CRYPTO CORE: Session Keys & E2E ─────────────────────────────────────────
 
-/**
- * Derives a 32-byte key from a password and salt using PBKDF2.
- */
 async function deriveKeyFromPassword(password, salt) {
     const enc = new TextEncoder();
     const keyMaterial = await window.crypto.subtle.importKey(
@@ -129,60 +125,33 @@ async function deriveKeyFromPassword(password, salt) {
     return new Uint8Array(keyBits);
 }
 
-/**
- * Initializes or retrieves the Session Master Key for the current user.
- * If no key exists in memory, it tries to restore from localStorage (if password was saved securely)
- * OR requires the user to enter a password to generate it.
- */
 async function ensureSessionKey(password = null) {
     if (!userAddress) throw new Error("No user address");
     
-    // Check memory cache first
     if (sessionKeys.has(userAddress)) {
         return sessionKeys.get(userAddress);
     }
 
-    // If password provided, generate new Master Key
     if (password) {
         const salt = `w3m-salt-${userAddress.toLowerCase()}`;
         const masterKey = await deriveKeyFromPassword(password, salt);
         sessionKeys.set(userAddress, masterKey);
-        
-        // Optionally: Save a "session token" to indicate this device is trusted 
-        // until logout. We don't save the password itself.
         localStorage.setItem(`w3m_session_active_${userAddress.toLowerCase()}`, 'true');
-        
-        console.log("🔑 [Session] Master Key generated for this session.");
+        console.log("🔑 [Session] Master Key generated.");
         return masterKey;
     }
 
-    // If no password and no memory key, check if we have a persistent session flag
-    // In a real app, you might store the encrypted key in localStorage. 
-    // For simplicity here, if page refreshed, we ask for password again OR 
-    // we could store the derived key encrypted by a simpler device-bound key.
-    // BUT, to keep it simple and secure: We require password on fresh load 
-    // UNLESS we implement complex local storage encryption.
-    
-    // For now, if memory is empty, we return null to trigger UI prompt.
     return null;
 }
 
-/**
- * Generates a unique Chat Key for a specific peer using the Master Key.
- * No MetaMask signing required!
- */
 async function getChatKey(peer) {
     const masterKey = await ensureSessionKey();
     if (!masterKey) throw new Error("Session not authenticated. Please enter password.");
 
     const peerLower = peer.toLowerCase();
     const userLower = userAddress.toLowerCase();
-    
-    // Deterministic Chat ID: sorted addresses
     const chatId = [userLower, peerLower].sort().join(':');
     
-    // Derive Chat Key from Master Key + Chat ID
-    // We use HKDF-like logic or simple HMAC. Here using SubtleCrypto HMAC.
     const cryptoKey = await window.crypto.subtle.importKey(
         "raw", masterKey, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
     );
@@ -191,7 +160,7 @@ async function getChatKey(peer) {
         "HMAC", cryptoKey, new TextEncoder().encode(chatId)
     );
     
-    return new Uint8Array(signature); // 32 bytes
+    return new Uint8Array(signature);
 }
 
 async function encrypt(text, peer) {
@@ -223,7 +192,7 @@ function isValidBase64(str) {
 
 async function decryptWithKey(encBase64, key) {
     if (!isValidBase64(encBase64)) {
-        return encBase64; // Return as is if not encrypted
+        return encBase64;
     }
     
     try {
@@ -478,9 +447,9 @@ function renderWelcome() {
                     <circle cx="48" cy="39" r="2.5" fill="#40A7E3"/>
                 </svg>
             </div>
-            <h3>Добро пожаловать</h3>
-            <p>Выберите чат или подключите кошелёк</p>
-            ${!userAddress ? `<button class="btn-primary" onclick="connectWallet()" style="margin-top:10px;width:auto;padding:8px 20px;">Подключить MetaMask</button>` : ''}
+            <h3>Добро пожаловать в Web3 Messenger</h3>
+            <p>Децентрализованное общение с полным шифрованием.<br>Выберите чат слева или подключите кошелек.</p>
+            ${!userAddress ? `<button class="btn-primary" onclick="connectWallet()" style="margin-top:20px; width:auto; padding:10px 24px;">Подключить MetaMask</button>` : ''}
         </div>
     `;
 }
@@ -534,7 +503,6 @@ async function loadMessages(chatId, start = 0) {
     if (!signer || !userAddress) return;
     if (!ethers.utils.isAddress(chatId)) return;
     
-    // Check if session is authenticated
     if (!sessionKeys.has(userAddress)) {
         openAuthModal();
         return;
@@ -556,7 +524,6 @@ async function loadMessages(chatId, start = 0) {
             store.chats.push(chat);
         }
 
-        // Decrypt all messages using Session Key
         const msgs = await Promise.all(all.map(async m => {
             const isSent = m.sender.toLowerCase() === userAddress.toLowerCase();
             let text = m.text;
@@ -615,11 +582,7 @@ async function sendMessage() {
     btn.disabled = input.disabled = true;
     
     try {
-        // Encrypt with Session Key
         const enc = await encrypt(text, store.currentChat);
-        
-        // Sign original text for verification (Optional, but good for integrity on-chain)
-        // This is the ONLY signature needed, and it's for the message content, not key gen.
         const sig = await signer.signMessage(text);
         
         const c = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
@@ -633,7 +596,7 @@ async function sendMessage() {
             const now = new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
             chat.messages.push({ 
                 id: Date.now()+userAddress, 
-                text, // Show plain text to sender
+                text, 
                 sent:true, 
                 time:now, 
                 signature:sig, 
@@ -670,8 +633,6 @@ async function refreshCurrentChat() {
 
 async function scanForNewSenders() {
     if (!provider || !userAddress) return;
-    
-    // If not authenticated, skip scanning to avoid errors
     if (!sessionKeys.has(userAddress)) return;
 
     try {
@@ -758,7 +719,6 @@ async function initWallet() {
             updateSidebarAvatar(); 
         }
         
-        // Check if session is already active for this user
         const sessionActive = localStorage.getItem(`w3m_session_active_${userAddress.toLowerCase()}`);
         if (!sessionActive || !sessionKeys.has(userAddress)) {
             openAuthModal();
@@ -793,9 +753,8 @@ function logout() {
     signer = null; 
     currentUsername = ''; 
     isAdmin = false;
-    sessionKeys.clear(); // Clear keys on logout
+    sessionKeys.clear(); 
     
-    // Remove session flag
     if (userAddress) localStorage.removeItem(`w3m_session_active_${userAddress.toLowerCase()}`);
     
     clearInterval(autoRefreshInterval); 
@@ -830,7 +789,6 @@ function openAuthModal() {
     if (modal) {
         modal.style.display = 'flex';
     } else {
-        // Fallback if modal doesn't exist in HTML yet (should be added)
         const pwd = prompt("🔐 Введите пароль для доступа к сообщениям:");
         if (pwd) handleAuthSubmit(pwd);
     }
@@ -847,11 +805,9 @@ async function handleAuthSubmit(password) {
         closeModal('auth-modal');
         showToast('🔓 Доступ получен', 'success');
         
-        // Start background tasks
         startAutoRefresh(); 
         startDiscovery();
         
-        // Reload current chat if any
         if (store.currentChat) loadMessages(store.currentChat);
         
     } catch (e) {
@@ -967,7 +923,7 @@ function clearAllData() {
     } 
 }
 
-// ─── Initialization ───────────────────────────────────────────────────────────
+// ─── Initialization ──────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     contactsStore.load(); 
     deletedChatsStore.load();
@@ -1041,4 +997,4 @@ window.shareToTelegram = shareToTelegram;
 window.shareToWhatsApp = shareToWhatsApp; 
 window.shareToTwitter = shareToTwitter;
 window.clearAllData = clearAllData;
-window.handleAuthSubmit = handleAuthSubmit; // Expose for modal button
+window.handleAuthSubmit = handleAuthSubmit;
