@@ -110,3 +110,7 @@ svg { display:block; }
 
 ::-webkit-scrollbar { width:5px; height:5px; }
 ::-webkit-scrollbar-thumb { background:rgba(255,255,255,.12); border-radius:4px; }
+
+/* Responsive */
+@media (max-width:900px) { .chat-panel { width:260px; } }
+@media (max-width:680px) { .sidebar { width:52px; } .chat-panel { display:none; } }
