@@ -2,7 +2,7 @@ console.log('Web3 Messenger v11 — New Contract Deploy');
 
 const ADMIN_ADDRESS = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
 const IDENTITY_CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
-const DEFAULT_MESSAGE_CONTRACT = "0x906DCA5190841d5F0acF8244bd8c176ecb24139D";
+const DEFAULT_MESSAGE_CONTRACT = "0xA07B784e6e1Ca3CA00084448a0b4957005C5ACEb";
 const REQUIRED_CHAIN_ID = 137;
 const MESSAGES_PER_PAGE = 50;
 const SCAN_BLOCKS_BACK = 50000;
@@ -24,6 +24,8 @@ const NEW_MESSAGE_ABI = [
     "event ChatDiscovered(address indexed user, address indexed peer)"
 ];
 
+const OLD_MESSAGE_CONTRACT = "0x906DCA5190841d5F0acF8244bd8c176ecb24139D";
+
 const OLD_MESSAGE_ABI = [
     "function sendMessage(address recipient, string text, bytes signature) external",
     "function getConversation(address userA, address userB, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, uint256 timestamp, bytes signature)[], uint256)",
@@ -37,7 +39,7 @@ let isNewContract = false;
 
 function detectContractType() {
     const addr = getMessageContractAddress();
-    isNewContract = addr !== DEFAULT_MESSAGE_CONTRACT;
+    isNewContract = addr.toLowerCase() !== OLD_MESSAGE_CONTRACT.toLowerCase();
     return isNewContract;
 }
 
