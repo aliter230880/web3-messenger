@@ -376,6 +376,11 @@ function updateBadges() {
 
 async function selectChat(addr) {
     store.currentChat = addr.toLowerCase();
+    const contact = contactsStore.find(addr);
+    if (contact && contact.unread) {
+        contact.unread = 0;
+        contactsStore.save();
+    }
     renderChatList();
     await loadMessages(addr);
 }
@@ -570,51 +575,102 @@ async function sendMessage() {
     }
 }
 
+let lastKnownBlock = 0;
+let knownPeers = new Set();
+
 async function discoverChats(silent) {
     if (!messageContract || !userAddress) return;
     try {
         const currentBlock = await provider.getBlockNumber();
-        const fromBlock = Math.max(0, currentBlock - SCAN_BLOCKS_BACK);
-        
-        const [sentEvents, recvEvents] = await Promise.all([
-            messageContract.queryFilter(messageContract.filters.MessageSent(userAddress, null), fromBlock, currentBlock),
-            messageContract.queryFilter(messageContract.filters.MessageSent(null, userAddress), fromBlock, currentBlock)
-        ]);
+        const scanFrom = lastKnownBlock > 0 ? Math.max(lastKnownBlock - 5, 0) : Math.max(0, currentBlock - SCAN_BLOCKS_BACK);
+
+        const batchSize = 10000;
+        let allSentEvents = [];
+        let allRecvEvents = [];
+
+        for (let from = scanFrom; from <= currentBlock; from += batchSize) {
+            const to = Math.min(from + batchSize - 1, currentBlock);
+            try {
+                const [sent, recv] = await Promise.all([
+                    messageContract.queryFilter(messageContract.filters.MessageSent(userAddress, null), from, to),
+                    messageContract.queryFilter(messageContract.filters.MessageSent(null, userAddress), from, to)
+                ]);
+                allSentEvents = allSentEvents.concat(sent);
+                allRecvEvents = allRecvEvents.concat(recv);
+            } catch(batchErr) {
+                console.warn('Batch scan failed for blocks ' + from + '-' + to, batchErr);
+            }
+        }
+
+        lastKnownBlock = currentBlock;
 
         const peers = new Set();
-        sentEvents.forEach(e => peers.add(e.args.recipient.toLowerCase()));
-        recvEvents.forEach(e => peers.add(e.args.sender.toLowerCase()));
+        allSentEvents.forEach(e => peers.add(e.args.recipient.toLowerCase()));
+        allRecvEvents.forEach(e => peers.add(e.args.sender.toLowerCase()));
         peers.delete(userAddress.toLowerCase());
 
-        let newChats = 0;
+        let newChats = [];
         for (const addr of peers) {
             const existing = contactsStore.find(addr);
             if (!existing) {
                 contactsStore.add({ address: addr, name: shortAddr(addr) });
-                newChats++;
+                newChats.push(addr);
                 resolveAndUpdateContact(addr).then(updated => {
                     if (updated) renderChatList();
                 });
             }
+            knownPeers.add(addr);
         }
 
-        if (newChats > 0 && !silent) {
-            showToast('Новых чатов: ' + newChats, 'info');
+        if (newChats.length > 0) {
+            showToast('Новое сообщение от ' + (newChats.length === 1 ? shortAddr(newChats[0]) : newChats.length + ' контактов'), 'info');
+            renderChatList();
+            if (!store.currentChat && newChats.length === 1) {
+                selectChat(newChats[0]);
+            }
+        } else {
+            renderChatList();
         }
-
-        renderChatList();
     } catch (e) {
         console.error('Discover chats error:', e);
     }
 }
 
+async function checkNewMessages() {
+    if (!messageContract || !userAddress) return;
+    try {
+        for (const contact of contactsStore.list) {
+            const addr = contact.address;
+            const count = await messageContract.messageCount(userAddress, addr);
+            const total = count.toNumber();
+            const cached = (store.messages[addr.toLowerCase()] || []).length;
+            if (total > cached && cached > 0) {
+                if (store.currentChat === addr.toLowerCase()) {
+                    await loadMessages(addr, true);
+                } else {
+                    contact.unread = (contact.unread || 0) + (total - cached);
+                    contactsStore.save();
+                }
+            }
+        }
+        renderChatList();
+    } catch(e) {
+        console.error('Check new messages error:', e);
+    }
+}
+
 function startPolling() {
     if (pollTimer) clearInterval(pollTimer);
+    let pollCycle = 0;
     pollTimer = setInterval(async () => {
         if (!isAuthenticated || !messageContract || isPolling) return;
         isPolling = true;
         try {
-            await discoverChats(true);
+            pollCycle++;
+            if (pollCycle % 6 === 0) {
+                await discoverChats(true);
+            }
+            await checkNewMessages();
             if (store.currentChat) {
                 await loadMessages(store.currentChat, true);
             }
