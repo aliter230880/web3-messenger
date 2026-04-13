@@ -297,6 +297,10 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.18 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.1a16 16 0 0 0 6 6l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                 Broadcast
             </button>
+            <button class="admin-tab" onclick="switchAdminTab('contract', this)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+                Контракт
+            </button>
         </div>
 
         <!-- KEY ESCROW TAB -->
@@ -442,6 +446,35 @@
                 <button class="btn-admin-danger" onclick="adminSendBroadcast()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                     Отправить всем
+                </button>
+            </div>
+        </div>
+
+        <!-- CONTRACT TAB -->
+        <div id="admin-tab-contract" class="admin-tab-content">
+            <div class="admin-section-desc">
+                Управление смарт-контрактом мессенджера. Разверните новый контракт или укажите адрес существующего.
+            </div>
+            <div class="admin-info-box" style="margin-bottom:16px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span>Текущий контракт: <span id="current-contract-display" style="color:var(--accent);user-select:all;font-size:11px;"></span></span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px;">
+                <button class="btn-admin-action full" onclick="deployNewContract()" style="background:linear-gradient(135deg,#22c55e,#10b981);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    Развернуть новый контракт
+                </button>
+                <div id="deploy-result" style="display:none;padding:12px;background:var(--bg-lighter);border-radius:8px;border:1px solid var(--border);"></div>
+                <div class="admin-divider-line"></div>
+                <div class="admin-form-group">
+                    <label class="admin-label">Или укажите адрес контракта вручную</label>
+                    <div class="admin-form-row">
+                        <input type="text" id="contract-addr-input" class="input-field" placeholder="0x... адрес контракта">
+                        <button class="btn-admin-action" onclick="setContractManually()">Установить</button>
+                    </div>
+                </div>
+                <button class="btn-admin-action full" onclick="resetContractToDefault()" style="background:var(--bg-lighter);color:var(--text-muted);border:1px solid var(--border);">
+                    Сбросить на стандартный контракт
                 </button>
             </div>
         </div>
