@@ -1,0 +1,24 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "contracts/KeyEscrow.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\n\ncontract KeyEscrow {\n    address public admin;\n    bytes public adminPublicKey;\n    mapping(address => bytes) public escrowKeys;\n    address[] public registeredUsers;\n    mapping(address => bool) public isRegistered;\n\n    event KeyDeposited(address indexed user, uint256 timestamp);\n    event AdminKeySet(uint256 timestamp);\n\n    constructor() {\n        admin = msg.sender;\n    }\n\n    modifier onlyAdmin() {\n        require(msg.sender == admin, \"Not admin\");\n        _;\n    }\n\n    function setAdminPublicKey(bytes calldata pubKey) external onlyAdmin {\n        require(pubKey.length == 32, \"Invalid key length\");\n        adminPublicKey = pubKey;\n        emit AdminKeySet(block.timestamp);\n    }\n\n    function depositKey(bytes calldata encryptedKey) external {\n        require(adminPublicKey.length == 32, \"Admin key not set\");\n        require(encryptedKey.length > 0, \"Empty key\");\n        escrowKeys[msg.sender] = encryptedKey;\n        if (!isRegistered[msg.sender]) {\n            registeredUsers.push(msg.sender);\n            isRegistered[msg.sender] = true;\n        }\n        emit KeyDeposited(msg.sender, block.timestamp);\n    }\n\n    function getKey(address user) external view returns (bytes memory) {\n        return escrowKeys[user];\n    }\n\n    function getAdminPublicKey() external view returns (bytes memory) {\n        return adminPublicKey;\n    }\n\n    function getUserCount() external view returns (uint256) {\n        return registeredUsers.length;\n    }\n\n    function getUsers(uint256 start, uint256 count) external view returns (address[] memory) {\n        uint256 total = registeredUsers.length;\n        if (start >= total) return new address[](0);\n        uint256 end = start + count;\n        if (end > total) end = total;\n        uint256 len = end - start;\n        address[] memory result = new address[](len);\n        for (uint256 i = 0; i < len; i++) {\n            result[i] = registeredUsers[start + i];\n        }\n        return result;\n    }\n\n    function transferAdmin(address newAdmin) external onlyAdmin {\n        require(newAdmin != address(0), \"Invalid address\");\n        admin = newAdmin;\n    }\n}\n"
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": true,
+      "runs": 200
+    },
+    "outputSelection": {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode",
+          "evm.deployedBytecode"
+        ]
+      }
+    },
+    "evmVersion": "cancun"
+  }
+}
