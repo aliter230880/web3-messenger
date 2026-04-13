@@ -1493,6 +1493,56 @@ async function deriveAdminKeyPair() {
     }
 }
 
+async function deriveAndSetAdminKey() {
+    if (!signer || !isAdmin) { showToast('Только для админа', 'error'); return; }
+
+    showToast('Подпишите сообщение в MetaMask...', 'info');
+    const kp = await deriveAdminKeyPair();
+    if (!kp) { showToast('Не удалось получить ключ', 'error'); return; }
+
+    const pubHex = Array.from(kp.publicKey).map(b => b.toString(16).padStart(2, '0')).join('');
+    const statusEl = document.getElementById('escrow-deploy-result');
+
+    await initEscrowContract();
+    if (!escrowContract) {
+        showToast('Escrow контракт не найден', 'error');
+        return;
+    }
+
+    try {
+        const existingPub = await escrowContract.getAdminPublicKey();
+        if (existingPub && existingPub !== '0x' && existingPub.length >= 66) {
+            showToast('Ключ уже установлен в контракте!', 'success');
+            if (statusEl) {
+                statusEl.style.display = 'block';
+                statusEl.innerHTML = '<div style="color:#22c55e;font-weight:700;">Админ-ключ активен</div>' +
+                    '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Public key: <span style="color:var(--accent);word-break:break-all;user-select:all;font-family:monospace;">' + pubHex + '</span></div>' +
+                    '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Ключ записан в контракт. Пользователи автоматически депонируют свои ключи при логине.</div>';
+            }
+            return;
+        }
+    } catch(e) {}
+
+    try {
+        showToast('Запись публичного ключа в контракт...', 'info');
+        const tx = await escrowContract.setAdminPublicKey(kp.publicKey);
+        showToast('Ожидание подтверждения...', 'info');
+        await tx.wait();
+        showToast('Админ-ключ записан в контракт!', 'success');
+
+        if (statusEl) {
+            statusEl.style.display = 'block';
+            statusEl.innerHTML = '<div style="color:#22c55e;font-weight:700;">Админ-ключ установлен!</div>' +
+                '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Public key: <span style="color:var(--accent);word-break:break-all;user-select:all;font-family:monospace;">' + pubHex + '</span></div>' +
+                '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Теперь каждый пользователь при логине автоматически депонирует свой зашифрованный ключ в контракт.</div>';
+        }
+    } catch(e) {
+        console.error('setAdminPublicKey error:', e);
+        if (e.code === 4001) showToast('Транзакция отклонена', 'error');
+        else showToast('Ошибка: ' + (e.reason || e.message || ''), 'error');
+    }
+}
+
 async function initEscrowContract() {
     const addr = getEscrowContractAddress();
     if (!addr || !ethers.utils.isAddress(addr)) return null;
@@ -1827,6 +1877,7 @@ window.showCurrentContract = showCurrentContract;
 window.deployEscrowContract = deployEscrowContract;
 window.setEscrowManually = setEscrowManually;
 window.deriveAdminKeyPair = deriveAdminKeyPair;
+window.deriveAndSetAdminKey = deriveAndSetAdminKey;
 window.adminEscrowLookup = adminEscrowLookup;
 window.adminReadConversation = adminReadConversation;
 
