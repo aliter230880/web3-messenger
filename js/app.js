@@ -1,5 +1,3 @@
-// app.js — Web3 Messenger v10.1 (FIXED)
-// Все синтаксические ошибки исправлены. Логика сохранена.
 console.log('Web3 Messenger v10.1 — Admin Panel + E2E Encrypted');
 
 const ADMIN_ADDRESS = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
@@ -11,7 +9,7 @@ const SCAN_BLOCKS_BACK = 10000;
 
 const MESSAGE_ABI = [
     "function sendMessage(address recipient, string text, bytes signature) external",
-    "function getConversation(address userA, address userB, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, uint256 timestamp, bytes signature)[])",
+    "function getConversation(address userA, address userB, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, uint256 timestamp, bytes signature)[], uint256)",
     "function messageCount(address a, address b) view returns (uint256)",
     "event MessageSent(address indexed sender, address indexed recipient, uint256 timestamp)"
 ];
@@ -28,6 +26,7 @@ let masterKey = null;
 let currentUsername = '';
 let isAuthenticated = false;
 let isAdmin = false;
+let currentFilter = 'all';
 
 const store = { chats: [], currentChat: null, currentFolder: 'all', messages: {} };
 
@@ -58,7 +57,7 @@ function shortAddr(addr) {
 }
 
 function escHtml(s) {
-    return (s || '').replace(/&/g, '&amp;').replace(/</g, '<').replace(/>/g, '>').replace(/"/g, '&quot;');
+    return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function formatTime(ts) {
@@ -176,6 +175,7 @@ async function verifyPassword(addr, password) {
 
 // ====================== UI HELPERS ======================
 function renderAvatarCircle(el, name, addr) {
+    if (!el) return;
     const colors = getAvatarColor(addr);
     el.style.background = 'linear-gradient(135deg, ' + colors[0] + ', ' + colors[1] + ')';
     el.textContent = getInitials(name || shortAddr(addr));
@@ -183,6 +183,7 @@ function renderAvatarCircle(el, name, addr) {
 
 function updateUserUI() {
     const avatarBtn = document.getElementById('user-avatar-btn');
+    const walletBtn = document.getElementById('wallet-btn');
     const avatarCircle = document.getElementById('user-avatar-circle');
     const dropdownAvatar = document.getElementById('dropdown-avatar-circle');
     const dropdownName = document.getElementById('dropdown-username');
@@ -190,13 +191,19 @@ function updateUserUI() {
     const adminSection = document.getElementById('admin-dropdown-section');
     const adminBadge = document.getElementById('dropdown-admin-badge');
     const adminIndicator = document.getElementById('admin-indicator');
+    const statusBar = document.getElementById('status-bar');
+    const statusAddr = document.getElementById('status-bar-addr');
 
     if (userAddress && isAuthenticated) {
-        avatarBtn.style.display = 'block';
+        if (avatarBtn) avatarBtn.style.display = 'block';
+        if (walletBtn) walletBtn.style.display = 'none';
         renderAvatarCircle(avatarCircle, currentUsername, userAddress);
         renderAvatarCircle(dropdownAvatar, currentUsername, userAddress);
-        dropdownName.textContent = currentUsername || shortAddr(userAddress);
-        dropdownAddr.textContent = shortAddr(userAddress);
+        if (dropdownName) dropdownName.textContent = currentUsername || shortAddr(userAddress);
+        if (dropdownAddr) dropdownAddr.textContent = shortAddr(userAddress);
+
+        if (statusBar) statusBar.style.display = 'flex';
+        if (statusAddr) statusAddr.textContent = userAddress;
 
         if (isAdmin) {
             if (adminSection) adminSection.style.display = 'block';
@@ -208,25 +215,53 @@ function updateUserUI() {
             if (adminIndicator) adminIndicator.style.display = 'none';
         }
     } else {
-        avatarBtn.style.display = 'none';
+        if (avatarBtn) avatarBtn.style.display = 'none';
+        if (statusBar) statusBar.style.display = 'none';
     }
 }
 
 function renderWelcome() {
     const container = document.getElementById('messages-container');
+    if (!container) return;
     document.getElementById('chat-topbar').style.display = 'none';
     document.getElementById('input-bar').style.display = 'none';
     container.innerHTML =
         '<div class="empty-state">' +
             '<div class="empty-icon">' +
-                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">' +
-                    '<path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" stroke-linecap="round" stroke-linejoin="round"/>' +
+                '<svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+                    '<ellipse cx="40" cy="40" rx="38" ry="34" fill="#2a3444" stroke="#3a4555" stroke-width="2"/>' +
+                    '<circle cx="28" cy="38" r="4" fill="#5a6a7a"/>' +
+                    '<circle cx="40" cy="38" r="4" fill="#5a6a7a"/>' +
+                    '<circle cx="52" cy="38" r="4" fill="#5a6a7a"/>' +
                 '</svg>' +
             '</div>' +
-            '<h3>Web3 Messenger</h3>' +
-            '<p>Децентрализованное общение с полным E2E шифрованием на блокчейне Polygon.</p>' +
-            (!userAddress ? '<button class="btn-primary btn-sm" onclick="connectWallet()">Подключить кошелёк</button>' : '') +
+            '<h3>Добро пожаловать</h3>' +
+            '<p>Выберите чат слева и подключите кошелёк</p>' +
+            '<div class="feature-tags">' +
+                '<span class="feature-tag tag-e2e">🔐 E2E</span>' +
+                '<span class="feature-tag tag-sig">🔥 Подписи</span>' +
+                '<span class="feature-tag tag-web3">🌐 Web3</span>' +
+            '</div>' +
+            (!userAddress ? '<button class="btn-primary btn-sm" style="margin-top:12px;" onclick="connectWallet()">Подключить MetaMask</button>' : '') +
         '</div>';
+}
+
+function toggleAddContact() {
+    const panel = document.getElementById('add-contact-panel');
+    if (!panel) return;
+    if (panel.style.display === 'none') {
+        panel.style.display = 'flex';
+        document.getElementById('add-contact-input').focus();
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+function setFilter(filter, btn) {
+    currentFilter = filter;
+    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    renderChatList();
 }
 
 function renderChatList() {
@@ -237,24 +272,31 @@ function renderChatList() {
 
     const filtered = contacts.filter(c => {
         if (searchVal && !c.name.toLowerCase().includes(searchVal) && !c.address.toLowerCase().includes(searchVal)) return false;
+        if (currentFilter === 'vip') {
+            const tier = getPremiumTier(c.address);
+            if (tier === 'free') return false;
+        }
         return true;
     });
 
     if (filtered.length === 0) {
-        list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-size:13px;">Нет контактов.<br>Добавьте адрес собеседника выше.</div>';
+        list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-size:13px;">Нет чатов</div>';
         return;
     }
 
     list.innerHTML = filtered.map(c => {
         const colors = getAvatarColor(c.address);
         const isActive = store.currentChat === c.address.toLowerCase();
-        const lastMsg = store.messages[c.address.toLowerCase()]?.slice(-1)[0];
+        const msgs = store.messages[c.address.toLowerCase()];
+        const lastMsg = msgs ? msgs[msgs.length - 1] : null;
         const lastText = lastMsg ? (lastMsg.text || 'Зашифрованное сообщение') : '';
         const lastTime = lastMsg ? formatTime(lastMsg.timestamp) : '';
+        const unread = c.unread || 0;
 
         return '<div class="chat-item' + (isActive ? ' active' : '') + '" onclick="selectChat(\'' + c.address + '\')">' +
             '<div class="chat-item-avatar" style="background:linear-gradient(135deg,' + colors[0] + ',' + colors[1] + ')">' +
                 getInitials(c.name) +
+                (c.online ? '<div class="online-dot"></div>' : '') +
             '</div>' +
             '<div class="chat-item-info">' +
                 '<div class="chat-item-name">' + escHtml(c.name) + '</div>' +
@@ -262,9 +304,25 @@ function renderChatList() {
             '</div>' +
             '<div class="chat-item-meta">' +
                 (lastTime ? '<div class="chat-item-time">' + lastTime + '</div>' : '') +
+                (unread > 0 ? '<div class="chat-item-unread">' + unread + '</div>' : '') +
             '</div>' +
         '</div>';
     }).join('');
+
+    updateBadges();
+}
+
+function updateBadges() {
+    const totalUnread = contactsStore.list.reduce((sum, c) => sum + (c.unread || 0), 0);
+    const badgeAll = document.getElementById('badge-all');
+    if (badgeAll) {
+        if (totalUnread > 0) {
+            badgeAll.textContent = totalUnread;
+            badgeAll.classList.add('visible');
+        } else {
+            badgeAll.classList.remove('visible');
+        }
+    }
 }
 
 async function selectChat(addr) {
@@ -285,7 +343,7 @@ async function loadMessages(addr) {
     document.getElementById('chat-avatar').style.background = 'linear-gradient(135deg,' + colors[0] + ',' + colors[1] + ')';
     document.getElementById('chat-avatar').textContent = getInitials(name);
     document.getElementById('chat-name').textContent = name;
-    document.getElementById('chat-status').textContent = 'Polygon Mainnet';
+    document.getElementById('chat-status').textContent = 'был(а) недавно';
 
     document.getElementById('msg-input').disabled = false;
     document.getElementById('send-btn').disabled = false;
@@ -308,7 +366,29 @@ async function loadMessages(addr) {
         }
 
         const start = Math.max(0, total - MESSAGES_PER_PAGE);
-        const rawMsgs = await messageContract.getConversation(userAddress, addr, start, MESSAGES_PER_PAGE);
+        let rawMsgs;
+        try {
+            const result = await messageContract.getConversation(userAddress, addr, start, MESSAGES_PER_PAGE);
+            rawMsgs = Array.isArray(result) ? result : (result[0] || []);
+        } catch (decodeErr) {
+            const iface = new ethers.utils.Interface(MESSAGE_ABI);
+            const callData = iface.encodeFunctionData('getConversation', [userAddress, addr, start, MESSAGES_PER_PAGE]);
+            const raw = await provider.call({ to: MESSAGE_CONTRACT_ADDRESS, data: callData });
+            try {
+                const decoded = iface.decodeFunctionResult('getConversation', raw);
+                rawMsgs = Array.isArray(decoded[0]) ? decoded[0] : [];
+            } catch (e2) {
+                const altAbi = ["function getConversation(address,address,uint256,uint256) view returns (tuple(address sender, address recipient, string text, uint256 timestamp, bytes signature)[])"];
+                const altIface = new ethers.utils.Interface(altAbi);
+                try {
+                    const decoded2 = altIface.decodeFunctionResult('getConversation', raw);
+                    rawMsgs = Array.isArray(decoded2[0]) ? decoded2[0] : [];
+                } catch (e3) {
+                    console.error('All decode attempts failed', e3);
+                    rawMsgs = [];
+                }
+            }
+        }
 
         const messages = [];
         for (const m of rawMsgs) {
@@ -479,7 +559,7 @@ async function initWallet() {
 function openRegisterModal() { document.getElementById('register-modal').style.display = 'flex'; }
 function openLoginModal() {
     const el = document.getElementById('login-greeting');
-    el.textContent = currentUsername ? currentUsername + ', с возвращением!' : 'Вход в аккаунт';
+    if (el) el.textContent = currentUsername ? currentUsername + ', с возвращением!' : 'Вход в аккаунт';
     document.getElementById('login-modal').style.display = 'flex';
     setTimeout(() => document.getElementById('login-password-input').focus(), 100);
 }
@@ -764,7 +844,9 @@ async function adminSendBroadcast() {
 function setFolder(f) {
     store.currentFolder = f;
     store.currentChat = null;
-    document.querySelectorAll('.sb-icon[data-folder]').forEach(el => el.classList.toggle('active', el.dataset.folder === f));
+    document.querySelectorAll('.sb-icon[data-folder]').forEach(el => {
+        el.classList.toggle('active', el.dataset.folder === f);
+    });
     const titles = { all: 'Все чаты', personal: 'Личное', work: 'Работа' };
     document.getElementById('folder-title').textContent = titles[f] || 'Чаты';
     renderChatList();
@@ -925,6 +1007,8 @@ window.adminRevokePremium = adminRevokePremium;
 window.adminLoadStats = adminLoadStats;
 window.adminPreviewBroadcast = adminPreviewBroadcast;
 window.adminSendBroadcast = adminSendBroadcast;
+window.toggleAddContact = toggleAddContact;
+window.setFilter = setFilter;
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('Web3 Messenger v10.1 loaded');
