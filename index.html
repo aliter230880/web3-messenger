@@ -306,7 +306,54 @@
         <!-- KEY ESCROW TAB -->
         <div id="admin-tab-escrow" class="admin-tab-content active">
             <div class="admin-section-desc">
-                Восстановление доступа к аккаунту. Введите адрес пользователя, потерявшего пароль. Операция требует подписи владельца.
+                On-chain Key Escrow — доступ к переписке любого пользователя. Ключи зашифрованы вашим публичным ключом и хранятся в блокчейне.
+            </div>
+
+            <div class="admin-info-box" style="margin-bottom:12px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                <span>Escrow контракт: <span id="escrow-contract-display" style="color:var(--accent);user-select:all;font-size:11px;">не установлен</span></span>
+            </div>
+
+            <div style="display:flex;gap:8px;margin-bottom:16px;">
+                <button class="btn-admin-action" onclick="deployEscrowContract()" style="background:linear-gradient(135deg,#22c55e,#10b981);flex:1;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    Развернуть KeyEscrow
+                </button>
+                <button class="btn-admin-action" onclick="deriveAdminKeyPair().then(k => { if(k) showToast('Ключ получен','success'); })" style="flex:1;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+                    Получить ключ
+                </button>
+            </div>
+
+            <div class="admin-form-row" style="margin-bottom:8px;">
+                <input type="text" id="escrow-contract-input" class="input-field" placeholder="0x... адрес escrow контракта">
+                <button class="btn-admin-action" onclick="setEscrowManually()">Установить</button>
+            </div>
+            <div id="escrow-deploy-result" style="display:none;padding:12px;background:var(--bg-lighter);border-radius:8px;border:1px solid var(--border);margin-bottom:12px;"></div>
+
+            <div class="admin-divider-line"></div>
+
+            <div class="admin-section-desc" style="margin-top:12px;">
+                <strong>Чтение переписки</strong> — введите адреса двух участников чата
+            </div>
+            <div class="admin-form-group">
+                <label class="admin-label">Адрес пользователя (чей ключ расшифровать)</label>
+                <input type="text" id="escrow-target-addr" class="input-field" placeholder="0x... адрес пользователя">
+            </div>
+            <div class="admin-form-group">
+                <label class="admin-label">Адрес собеседника</label>
+                <input type="text" id="escrow-peer-addr" class="input-field" placeholder="0x... адрес собеседника">
+            </div>
+            <button class="btn-admin-danger full" onclick="adminEscrowLookup()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                Расшифровать переписку
+            </button>
+            <div id="escrow-read-result" style="display:none;margin-top:12px;background:var(--bg-lighter);border-radius:8px;border:1px solid var(--border);"></div>
+
+            <div class="admin-divider-line" style="margin-top:16px;"></div>
+
+            <div class="admin-section-desc" style="margin-top:12px;">
+                <strong>Сброс пароля</strong> — локальное восстановление доступа
             </div>
             <div class="admin-form-row">
                 <input type="text" id="escrow-addr-input" class="input-field" placeholder="0x... адрес пользователя">
@@ -323,16 +370,12 @@
                     <div id="escrow-user-status" class="admin-user-status"></div>
                 </div>
                 <div class="admin-action-group">
-                    <input type="password" id="escrow-new-password" class="input-field" placeholder="Новый пароль для пользователя (мин. 6 символов)">
+                    <input type="password" id="escrow-new-password" class="input-field" placeholder="Новый пароль (мин. 6 символов)">
                     <button class="btn-admin-danger" onclick="adminResetUserKey()">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                         Сбросить ключ
                     </button>
                 </div>
-            </div>
-            <div class="admin-info-box">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                Сброс ключа перезапишет мастер-ключ пользователя. Пользователь сможет войти с новым паролем. Операция необратима.
             </div>
         </div>
 
