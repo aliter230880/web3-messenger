@@ -317,6 +317,10 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                 <span>Escrow контракт: <span id="escrow-contract-display" style="color:var(--accent);user-select:all;font-size:11px;">не установлен</span></span>
             </div>
+            <div class="admin-info-box" style="margin-bottom:12px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <span>Social Registry: <span id="social-registry-display" style="color:#f59e0b;user-select:all;font-size:11px;">не установлен</span></span>
+            </div>
 
             <div style="display:flex;gap:8px;margin-bottom:8px;">
                 <button class="btn-admin-action" onclick="deployPubKeyRegistry()" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);flex:1;">
@@ -328,10 +332,14 @@
                     Escrow Admin ключ
                 </button>
             </div>
-            <div style="display:flex;gap:8px;margin-bottom:16px;">
+            <div style="display:flex;gap:8px;margin-bottom:8px;">
                 <button class="btn-admin-action" onclick="deployEscrowContract()" style="background:linear-gradient(135deg,#22c55e,#10b981);flex:1;">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                     Развернуть KeyEscrow
+                </button>
+                <button class="btn-admin-action" onclick="deploySocialRegistry()" style="background:linear-gradient(135deg,#f59e0b,#d97706);flex:1;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    Развернуть Social Registry
                 </button>
             </div>
 
