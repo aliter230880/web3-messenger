@@ -765,6 +765,22 @@ function onAuthenticated() {
             if (updated) renderChatList();
         });
     });
+    handleContactFromUrl();
+}
+
+function handleContactFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const contactAddr = params.get('contact');
+    if (contactAddr && ethers.utils.isAddress(contactAddr) && contactAddr.toLowerCase() !== userAddress.toLowerCase()) {
+        const existing = contactsStore.find(contactAddr);
+        if (!existing) {
+            contactsStore.add({ address: contactAddr, name: shortAddr(contactAddr) });
+            resolveAndUpdateContact(contactAddr).then(() => renderChatList());
+            showToast('Контакт добавлен из ссылки', 'success');
+        }
+        selectChat(contactAddr);
+        window.history.replaceState({}, '', window.location.pathname);
+    }
 }
 
 // ====================== ADMIN PANEL ======================
@@ -1134,6 +1150,79 @@ function logout() {
     location.reload();
 }
 
+// ====================== SHARE ======================
+const SHARE_BASE_URL = 'https://chat.aliterra.space/';
+
+function getShareUrl() {
+    return SHARE_BASE_URL + '?contact=' + encodeURIComponent(userAddress);
+}
+
+function getShareText() {
+    const name = currentUsername || shortAddr(userAddress);
+    return name + ' — напишите мне в Web3 Messenger!\n' + getShareUrl();
+}
+
+function openShareModal() {
+    document.getElementById('user-dropdown-menu').classList.add('hidden');
+    if (!userAddress) { showToast('Сначала подключите кошелёк', 'error'); return; }
+
+    const modal = document.getElementById('share-modal');
+    modal.style.display = 'flex';
+
+    renderAvatarCircle(document.getElementById('share-avatar-lg'), currentUsername, userAddress);
+    document.getElementById('share-username').textContent = currentUsername || shortAddr(userAddress);
+    document.getElementById('share-address-full').textContent = userAddress;
+    document.getElementById('share-link-display').textContent = getShareUrl();
+
+    generateQR();
+}
+
+function generateQR() {
+    const qrEl = document.getElementById('share-qr');
+    const url = getShareUrl();
+    const size = 180;
+    const qrApiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=' + size + 'x' + size + '&data=' + encodeURIComponent(url) + '&bgcolor=ffffff&color=000000&margin=0';
+    qrEl.innerHTML = '<img src="' + qrApiUrl + '" width="' + size + '" height="' + size + '" alt="QR" style="border-radius:8px;display:block;" />';
+}
+
+function copyShareLink() {
+    navigator.clipboard.writeText(getShareUrl()).then(() => {
+        showToast('Ссылка скопирована', 'success');
+    }).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = getShareUrl();
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+        showToast('Ссылка скопирована', 'success');
+    });
+}
+
+function copyAddress() {
+    navigator.clipboard.writeText(userAddress).then(() => {
+        showToast('Адрес скопирован', 'success');
+    }).catch(() => {
+        showToast('Не удалось скопировать', 'error');
+    });
+}
+
+function shareToTelegram() {
+    window.open('https://t.me/share/url?url=' + encodeURIComponent(getShareUrl()) + '&text=' + encodeURIComponent(getShareText()), '_blank');
+}
+
+function shareToWhatsApp() {
+    window.open('https://wa.me/?text=' + encodeURIComponent(getShareText()), '_blank');
+}
+
+function shareToX() {
+    window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(getShareText()), '_blank');
+}
+
+function shareToFacebook() {
+    window.open('https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(getShareUrl()), '_blank');
+}
+
 // ====================== GLOBAL EXPORTS ======================
 window.connectWallet = connectWallet;
 window.sendMessage = sendMessage;
@@ -1170,6 +1259,13 @@ window.setFilter = setFilter;
 window.deleteChat = deleteChat;
 window.startPolling = startPolling;
 window.stopPolling = stopPolling;
+window.openShareModal = openShareModal;
+window.copyShareLink = copyShareLink;
+window.copyAddress = copyAddress;
+window.shareToTelegram = shareToTelegram;
+window.shareToWhatsApp = shareToWhatsApp;
+window.shareToX = shareToX;
+window.shareToFacebook = shareToFacebook;
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('Web3 Messenger v10.2 loaded');
