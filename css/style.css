@@ -156,6 +156,15 @@ svg { display: block; }
 .chat-item:hover .chat-delete-btn { display: block; }
 .chat-item:hover .chat-item-time { display: none; }
 
+.share-socials { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
+.share-social-btn { width: 48px; height: 48px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.2s, box-shadow 0.2s; }
+.share-social-btn:hover { transform: scale(1.1); box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+.share-tg { background: #2AABEE; color: #fff; }
+.share-wa { background: #25D366; color: #fff; }
+.share-x { background: #000; color: #fff; }
+.share-fb { background: #1877F2; color: #fff; }
+.share-copy-addr { background: var(--bg-input); color: var(--text-sub); border: 1px solid var(--border); }
+
 /* STATUS BAR */
 .status-bar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-top: 1px solid var(--border); background: rgba(17, 24, 39, 0.6); }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; box-shadow: 0 0 6px rgba(34, 197, 94, 0.4); }
