@@ -66,8 +66,28 @@ function setEscrowContractAddress(addr) {
     localStorage.setItem('w3m_escrow_contract', addr);
 }
 
+const PUBKEY_REGISTRY_ABI = [
+    "function registerKey(bytes32 key) external",
+    "function getKey(address user) view returns (bytes32)",
+    "function hasKey(address user) view returns (bool)",
+    "function publicKeys(address) view returns (bytes32)",
+    "event KeyRegistered(address indexed user, uint256 timestamp)"
+];
+
+const PUBKEY_REGISTRY_BYTECODE = "0x6080604052348015600e575f5ffd5b506101f68061001c5f395ff3fe608060405234801561000f575f5ffd5b506004361061004a575f3560e01c806393790f441461004e578063a3d6f9a914610089578063cd80557e146100a8578063d36afad5146100bd575b5f5ffd5b61007661005c36600461017c565b6001600160a01b03165f9081526020819052604090205490565b6040519081526020015b60405180910390f35b61007661009736600461017c565b5f6020819052908152604090205481565b6100bb6100b63660046101a9565b6100f7565b005b6100e76100cb36600461017c565b6001600160a01b03165f90815260208190526040902054151590565b6040519015158152602001610080565b806101365760405162461bcd60e51b815260206004820152600b60248201526a496e76616c6964206b657960a81b604482015260640160405180910390fd5b335f818152602081815260409182902084905590514281527ff4537d5adbbf75716024737e134f58c5517cebebd162ac5123bb4597bbac74d9910160405180910390a250565b5f6020828403121561018c575f5ffd5b81356001600160a01b03811681146101a2575f5ffd5b9392505050565b5f602082840312156101b9575f5ffd5b503591905056fea2646970667358221220cd647040b80d88afe866ae7d96598c9727061aa6d060103e944e4830ca115df364736f6c634300081c0033";
+
+function getPubKeyRegistryAddress() {
+    return localStorage.getItem('w3m_pubkey_registry') || '';
+}
+function setPubKeyRegistryAddress(addr) {
+    localStorage.setItem('w3m_pubkey_registry', addr);
+}
+
 let escrowContract = null;
 let adminKeyPair = null;
+let pubKeyRegistryContract = null;
+let e2eKeyPair = null;
+let sharedKeyCache = {};
 
 let isNewContract = false;
 
@@ -177,7 +197,7 @@ function showToast(msg, type = 'info') {
     setTimeout(() => { d.style.opacity = '0'; setTimeout(() => d.remove(), 380); }, 3000);
 }
 
-// ====================== CRYPTO ======================
+// ====================== CRYPTO (DH E2E) ======================
 async function deriveMasterKey(password, addr) {
     const salt = 'w3m-master-' + (addr || userAddress).toLowerCase();
     const enc = new TextEncoder();
@@ -186,8 +206,79 @@ async function deriveMasterKey(password, addr) {
     return new Uint8Array(keyBits);
 }
 
+async function deriveE2EKeyPair() {
+    if (!signer) return null;
+    try {
+        const sig = await signer.signMessage('Web3Messenger-E2E-KeyPair-v1');
+        const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sig));
+        const secretKey = new Uint8Array(hash);
+        e2eKeyPair = nacl.box.keyPair.fromSecretKey(secretKey);
+        console.log('E2E keypair derived');
+        return e2eKeyPair;
+    } catch(e) {
+        console.error('E2E keypair derivation failed:', e);
+        return null;
+    }
+}
+
+async function initPubKeyRegistry() {
+    const addr = getPubKeyRegistryAddress();
+    if (!addr || !ethers.utils.isAddress(addr)) return null;
+    pubKeyRegistryContract = new ethers.Contract(addr, PUBKEY_REGISTRY_ABI, signer);
+    return pubKeyRegistryContract;
+}
+
+async function registerPublicKey() {
+    if (!pubKeyRegistryContract || !e2eKeyPair) return;
+    try {
+        const hasKey = await pubKeyRegistryContract.hasKey(userAddress);
+        if (hasKey) {
+            const existing = await pubKeyRegistryContract.getKey(userAddress);
+            const existingBytes = ethers.utils.arrayify(existing);
+            if (nacl.verify(existingBytes, e2eKeyPair.publicKey)) {
+                console.log('Public key already registered');
+                return;
+            }
+        }
+        const tx = await pubKeyRegistryContract.registerKey(e2eKeyPair.publicKey);
+        await tx.wait();
+        console.log('Public key registered on-chain');
+        showToast('E2E ключ зарегистрирован', 'success');
+    } catch(e) {
+        console.error('registerPublicKey error:', e);
+    }
+}
+
+async function getPeerPublicKey(peerAddr) {
+    if (!pubKeyRegistryContract) return null;
+    try {
+        const key = await pubKeyRegistryContract.getKey(peerAddr);
+        if (!key || key === ethers.constants.HashZero) return null;
+        return ethers.utils.arrayify(key);
+    } catch(e) {
+        console.error('getPeerPublicKey error:', e);
+        return null;
+    }
+}
+
+async function getSharedSecret(peerAddr) {
+    const cacheKey = peerAddr.toLowerCase();
+    if (sharedKeyCache[cacheKey]) return sharedKeyCache[cacheKey];
+
+    if (!e2eKeyPair) return null;
+    const peerPub = await getPeerPublicKey(peerAddr);
+    if (!peerPub) return null;
+
+    const shared = nacl.box.before(peerPub, e2eKeyPair.secretKey);
+    sharedKeyCache[cacheKey] = shared;
+    return shared;
+}
+
 async function getChatKey(peer) {
-    if (!masterKey) throw new Error("Master key not initialized");
+    const shared = await getSharedSecret(peer);
+    if (shared) return shared;
+
+    if (!masterKey) throw new Error("No encryption key available");
     const sorted = [userAddress.toLowerCase(), peer.toLowerCase()].sort().join(':');
     const cryptoKey = await crypto.subtle.importKey("raw", masterKey, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
     const sig = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(sorted));
@@ -207,15 +298,28 @@ async function encrypt(text, peer) {
 
 async function decrypt(encBase64, peer) {
     try {
-        const key = await getChatKey(peer);
         const data = atob(encBase64);
         const combined = new Uint8Array(data.length);
         for (let i = 0; i < data.length; i++) combined[i] = data.charCodeAt(i);
         const nonce = combined.slice(0, nacl.secretbox.nonceLength);
         const box = combined.slice(nacl.secretbox.nonceLength);
-        const dec = nacl.secretbox.open(box, nonce, key);
-        if (!dec) return null;
-        return new TextDecoder().decode(dec);
+
+        const shared = await getSharedSecret(peer);
+        if (shared) {
+            const dec = nacl.secretbox.open(box, nonce, shared);
+            if (dec) return new TextDecoder().decode(dec);
+        }
+
+        if (masterKey) {
+            const sorted = [userAddress.toLowerCase(), peer.toLowerCase()].sort().join(':');
+            const cryptoKey = await crypto.subtle.importKey("raw", masterKey, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+            const sig = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(sorted));
+            const oldKey = new Uint8Array(sig);
+            const dec2 = nacl.secretbox.open(box, nonce, oldKey);
+            if (dec2) return new TextDecoder().decode(dec2);
+        }
+
+        return null;
     } catch (e) { return null; }
 }
 
@@ -964,8 +1068,9 @@ async function handleRegister() {
         masterKey = key;
         currentUsername = username;
         isAuthenticated = true;
+        await deriveE2EKeyPair();
         closeModal('register-modal');
-        showToast('Аккаунт создан! Ключи шифрования сгенерированы.', 'success');
+        showToast('Аккаунт создан! E2E ключи сгенерированы.', 'success');
         onAuthenticated();
     } catch (e) {
         showToast('Ошибка регистрации: ' + e.message, 'error');
@@ -984,6 +1089,7 @@ async function handleLogin() {
     }
 
     masterKey = await deriveMasterKey(password);
+    await deriveE2EKeyPair();
     const account = getAccountData(userAddress);
     currentUsername = account.username || shortAddr(userAddress);
     isAuthenticated = true;
@@ -1010,6 +1116,12 @@ function onAuthenticated() {
     initEscrowContract().then(() => {
         if (escrowContract && masterKey) {
             escrowDepositKey().catch(e => console.warn('Escrow deposit skipped:', e.message));
+        }
+    });
+
+    initPubKeyRegistry().then(() => {
+        if (pubKeyRegistryContract && e2eKeyPair) {
+            registerPublicKey().catch(e => console.warn('PubKey registration skipped:', e.message));
         }
     });
 }
@@ -1068,6 +1180,8 @@ function switchAdminTab(tab, btn) {
     if (tab === 'escrow') {
         const el = document.getElementById('escrow-contract-display');
         if (el) el.textContent = getEscrowContractAddress() || 'не установлен';
+        const el2 = document.getElementById('pubkey-registry-display');
+        if (el2) el2.textContent = getPubKeyRegistryAddress() || 'не установлен';
     }
 }
 
@@ -1713,6 +1827,50 @@ async function adminEscrowLookup() {
     resultEl.innerHTML = html;
 }
 
+async function deployPubKeyRegistry() {
+    if (!signer) { showToast('Подключите кошелёк', 'error'); return; }
+    if (!confirm('Развернуть контракт PublicKeyRegistry на Polygon Mainnet?\nХранит публичные ключи DH для E2E шифрования.\n~0.005-0.01 MATIC на газ.')) return;
+
+    try {
+        showToast('Деплой PublicKeyRegistry...', 'info');
+        const factory = new ethers.ContractFactory(PUBKEY_REGISTRY_ABI, PUBKEY_REGISTRY_BYTECODE, signer);
+        const contract = await factory.deploy();
+        showToast('Ожидание подтверждения...', 'info');
+        await contract.deployed();
+
+        const addr = contract.address;
+        setPubKeyRegistryAddress(addr);
+        pubKeyRegistryContract = new ethers.Contract(addr, PUBKEY_REGISTRY_ABI, signer);
+
+        showToast('E2E Registry развёрнут: ' + shortAddr(addr), 'success');
+        console.log('PUBKEY REGISTRY CONTRACT:', addr);
+
+        const displayEl = document.getElementById('pubkey-registry-display');
+        if (displayEl) displayEl.textContent = addr;
+
+        if (e2eKeyPair) {
+            showToast('Регистрация вашего публичного ключа...', 'info');
+            const tx = await pubKeyRegistryContract.registerKey(e2eKeyPair.publicKey);
+            await tx.wait();
+            showToast('Ваш E2E ключ зарегистрирован!', 'success');
+        }
+
+        const resultEl = document.getElementById('escrow-deploy-result');
+        if (resultEl) {
+            resultEl.style.display = 'block';
+            resultEl.innerHTML = '<div style="color:#22c55e;font-weight:700;">E2E Registry развёрнут!</div>' +
+                '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Адрес: <span style="color:var(--accent);user-select:all;">' + addr + '</span></div>' +
+                '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Теперь каждый пользователь при регистрации сохраняет DH-публичный ключ на блокчейне. Оба собеседника шифруют общим секретом.</div>';
+        }
+        return addr;
+    } catch(e) {
+        console.error('Deploy PubKeyRegistry error:', e);
+        if (e.code === 4001) showToast('Отклонено', 'error');
+        else showToast('Ошибка: ' + (e.reason || e.message || ''), 'error');
+        return null;
+    }
+}
+
 async function deployEscrowContract() {
     if (!signer) { showToast('Подключите кошелёк', 'error'); return; }
     if (!confirm('Развернуть контракт KeyEscrow на Polygon Mainnet?\n~0.01-0.05 MATIC на газ.')) return;
@@ -1880,6 +2038,7 @@ window.deriveAdminKeyPair = deriveAdminKeyPair;
 window.deriveAndSetAdminKey = deriveAndSetAdminKey;
 window.adminEscrowLookup = adminEscrowLookup;
 window.adminReadConversation = adminReadConversation;
+window.deployPubKeyRegistry = deployPubKeyRegistry;
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('Web3 Messenger v12 loaded');
