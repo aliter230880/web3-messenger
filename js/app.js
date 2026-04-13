@@ -474,46 +474,138 @@ async function fetchConversation(userA, userB, startIdx, count) {
     const callData = iface.encodeFunctionData('getConversation', [userA, userB, startIdx, count]);
     const rawHex = await provider.call({ to: MESSAGE_CONTRACT_ADDRESS, data: callData });
 
-    for (let i = 0; i < MSG_ABI_VARIANTS.length; i++) {
+    if (rawHex === '0x' || rawHex.length < 66) {
+        console.warn('Empty response from getConversation');
+        return [];
+    }
+
+    console.log('getConversation raw response length:', rawHex.length, 'bytes:', (rawHex.length - 2) / 2);
+
+    const allVariants = [
+        ['(address,address,string,uint256,bytes)[]', 'uint256'],
+        ['(address,address,string,uint256)[]', 'uint256'],
+        ['(address,address,string,uint256,bytes)[]'],
+        ['(address,address,string,uint256)[]'],
+        ['(address,address,string,uint256,string)[]', 'uint256'],
+        ['(address,address,string,uint256,string)[]'],
+        ['(address,address,string,uint256,bytes,uint256)[]', 'uint256'],
+        ['(address,address,string,uint256,bytes,uint256)[]'],
+        ['(uint256,address,address,string,uint256,bytes)[]', 'uint256'],
+        ['(uint256,address,address,string,uint256,bytes)[]'],
+        ['(uint256,address,address,string,uint256)[]', 'uint256'],
+        ['(address,address,string,uint256,bytes,bool)[]', 'uint256'],
+        ['(address,address,uint256,string,bytes)[]', 'uint256'],
+        ['(address,address,bytes,uint256,bytes)[]', 'uint256'],
+    ];
+
+    const data = ethers.utils.arrayify(rawHex);
+
+    for (let i = 0; i < allVariants.length; i++) {
         try {
-            const altIface = new ethers.utils.Interface(MSG_ABI_VARIANTS[i]);
-            const decoded = altIface.decodeFunctionResult('getConversation', rawHex);
-            const arr = Array.isArray(decoded[0]) ? decoded[0] : (Array.isArray(decoded) ? decoded : []);
+            const decoded = ethers.utils.defaultAbiCoder.decode(allVariants[i], data);
+            const arr = Array.isArray(decoded[0]) ? decoded[0] : [];
             if (arr.length > 0) {
-                console.log('Decoded with ABI variant #' + i);
+                console.log('Decoded with variant #' + i + ':', JSON.stringify(allVariants[i]));
                 return arr;
             }
         } catch(e) {}
     }
 
-    console.warn('All ABI variants failed, attempting manual decode');
-    try {
-        const data = ethers.utils.arrayify(rawHex);
-        const abiCoder = ethers.utils.defaultAbiCoder;
-        const decoded = abiCoder.decode(
-            ['(address,address,string,uint256,bytes)[]', 'uint256'],
-            data
-        );
-        return decoded[0] || [];
-    } catch(e) {}
-    try {
-        const data = ethers.utils.arrayify(rawHex);
-        const decoded = ethers.utils.defaultAbiCoder.decode(
-            ['(address,address,string,uint256)[]', 'uint256'],
-            data
-        );
-        return decoded[0] || [];
-    } catch(e) {}
-    try {
-        const decoded = ethers.utils.defaultAbiCoder.decode(
-            ['(address,address,string,uint256)[]'],
-            ethers.utils.arrayify(rawHex)
-        );
-        return decoded[0] || [];
-    } catch(e) {}
+    console.warn('All standard decoders failed. Attempting raw byte extraction...');
+    return parseRawMessages(rawHex, userA, userB);
+}
 
-    console.error('All decode attempts failed for getConversation');
-    return [];
+function parseRawMessages(rawHex, userA, userB) {
+    try {
+        const hex = rawHex.startsWith('0x') ? rawHex.slice(2) : rawHex;
+        const word = (offset) => hex.slice(offset * 2, (offset + 32) * 2);
+        const toNum = (offset) => parseInt(word(offset), 16);
+        const toAddr = (offset) => '0x' + word(offset).slice(24);
+
+        const arrOffset = toNum(0);
+        const arrLen = toNum(arrOffset);
+
+        if (arrLen === 0 || arrLen > 500) {
+            console.warn('Raw parse: invalid array length', arrLen);
+            return [];
+        }
+
+        console.log('Raw parse: found array of', arrLen, 'messages at offset', arrOffset);
+
+        const messages = [];
+        const elemOffsetsStart = arrOffset + 32;
+
+        for (let i = 0; i < arrLen; i++) {
+            try {
+                const elemRelOffset = toNum(elemOffsetsStart + i * 32);
+                const elemAbsOffset = arrOffset + 32 + elemRelOffset;
+
+                const field0 = word(elemAbsOffset);
+                const field1 = word(elemAbsOffset + 32);
+                const field2 = word(elemAbsOffset + 64);
+                const field3 = word(elemAbsOffset + 96);
+
+                let sender, recipient, textOffset, timestamp;
+
+                const isAddr0 = field0.slice(0, 24) === '000000000000000000000000' && field0.slice(24) !== '0000000000000000000000000000000000000000';
+                const isAddr1 = field1.slice(0, 24) === '000000000000000000000000' && field1.slice(24) !== '0000000000000000000000000000000000000000';
+
+                if (isAddr0 && isAddr1) {
+                    sender = '0x' + field0.slice(24);
+                    recipient = '0x' + field1.slice(24);
+                    const f2Num = parseInt(field2, 16);
+                    const f3Num = parseInt(field3, 16);
+
+                    if (f2Num > 1000000) {
+                        timestamp = f2Num;
+                        textOffset = f3Num;
+                    } else {
+                        textOffset = f2Num;
+                        timestamp = f3Num;
+                    }
+                } else {
+                    const id = parseInt(field0, 16);
+                    sender = '0x' + field1.slice(24);
+                    recipient = '0x' + field2.slice(24);
+                    textOffset = parseInt(field3, 16);
+                    const field4 = word(elemAbsOffset + 128);
+                    timestamp = parseInt(field4, 16);
+                }
+
+                let text = '';
+                if (textOffset && textOffset < hex.length / 2) {
+                    const strAbsOffset = elemAbsOffset + textOffset;
+                    const strLen = toNum(strAbsOffset);
+                    if (strLen > 0 && strLen < 100000) {
+                        const strHex = hex.slice((strAbsOffset + 32) * 2, (strAbsOffset + 32 + strLen) * 2);
+                        text = decodeHexString(strHex);
+                    }
+                }
+
+                if (sender && recipient && text) {
+                    messages.push({ sender, recipient, text, timestamp: { toNumber: () => timestamp } });
+                }
+            } catch(elemErr) {
+                console.warn('Raw parse: failed to parse element', i, elemErr);
+            }
+        }
+
+        console.log('Raw parse: extracted', messages.length, 'messages');
+        return messages;
+    } catch(e) {
+        console.error('Raw parse failed:', e);
+        return [];
+    }
+}
+
+function decodeHexString(hex) {
+    try {
+        const bytes = [];
+        for (let i = 0; i < hex.length; i += 2) {
+            bytes.push(parseInt(hex.substr(i, 2), 16));
+        }
+        return new TextDecoder().decode(new Uint8Array(bytes));
+    } catch(e) { return ''; }
 }
 
 function renderMessages(messages) {
@@ -641,17 +733,26 @@ async function checkNewMessages() {
     try {
         for (const contact of contactsStore.list) {
             const addr = contact.address;
-            const count = await messageContract.messageCount(userAddress, addr);
-            const total = count.toNumber();
-            const cached = (store.messages[addr.toLowerCase()] || []).length;
-            if (total > cached && cached > 0) {
-                if (store.currentChat === addr.toLowerCase()) {
-                    await loadMessages(addr, true);
-                } else {
-                    contact.unread = (contact.unread || 0) + (total - cached);
-                    contactsStore.save();
+            try {
+                const count = await messageContract.messageCount(userAddress, addr);
+                const total = count.toNumber();
+                const cached = (store.messages[addr.toLowerCase()] || []).length;
+
+                if (!contact._lastKnownCount) contact._lastKnownCount = cached;
+
+                if (total > contact._lastKnownCount) {
+                    const newMsgCount = total - contact._lastKnownCount;
+                    contact._lastKnownCount = total;
+
+                    if (store.currentChat === addr.toLowerCase()) {
+                        await loadMessages(addr, true);
+                    } else {
+                        contact.unread = (contact.unread || 0) + newMsgCount;
+                        contactsStore.save();
+                        showToast('Новое сообщение от ' + contactsStore.getName(addr), 'info');
+                    }
                 }
-            }
+            } catch(contactErr) {}
         }
         renderChatList();
     } catch(e) {
