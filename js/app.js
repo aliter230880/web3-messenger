@@ -9,7 +9,13 @@ const SCAN_BLOCKS_BACK = 50000;
 const POLL_INTERVAL = 5000;
 
 function getMessageContractAddress() {
-    return localStorage.getItem('w3m_msg_contract') || DEFAULT_MESSAGE_CONTRACT;
+    const saved = localStorage.getItem('w3m_msg_contract');
+    if (saved && saved.toLowerCase() === OLD_MESSAGE_CONTRACT.toLowerCase()) {
+        console.log('Auto-migrating from old contract to new default');
+        localStorage.removeItem('w3m_msg_contract');
+        return DEFAULT_MESSAGE_CONTRACT;
+    }
+    return saved || DEFAULT_MESSAGE_CONTRACT;
 }
 function setMessageContractAddress(addr) {
     localStorage.setItem('w3m_msg_contract', addr);
