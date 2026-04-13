@@ -867,7 +867,7 @@ function clearAllData() {
     } 
 }
 
-// ─── Initialization ────────────────────────────────────────────────────────
+// ─── Initialization ─────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     contactsStore.load(); 
     deletedChatsStore.load();
