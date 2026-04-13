@@ -1,322 +1,446 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Web3 Messenger</title>
-    <meta name="description" content="Децентрализованный мессенджер с E2E шифрованием на Polygon" />
-    
-    <!-- CDN Dependencies (строго в этом порядке) -->
-    <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js" type="application/javascript"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl.min.js" integrity="sha512-C+9hKz8c8V3qP0qJqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPqPq" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    
-    <!-- Local Styles -->
-    <link rel="stylesheet" href="css/style.css" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💬</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <div class="app-container">
-        <!-- SIDEBAR -->
-        <aside class="sidebar">
-            <div class="sb-top">
-                <div class="sb-icon" title="Все чаты" data-folder="all" onclick="setFolder('all')">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                </div>
-                <div class="sb-icon" title="Личное" data-folder="personal" onclick="setFolder('personal')">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                </div>
-                <div class="sb-icon" title="Работа" data-folder="work" onclick="setFolder('work')">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-                </div>
-            </div>
-            <div class="sb-nav">
-                <div class="sb-icon" title="Обновить" onclick="refreshChats()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-                </div>
-                <div class="sb-icon" title="Контакты" onclick="openContactsModal()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                </div>
-            </div>
-            <div class="sb-bottom">
-                <div id="user-avatar-btn" class="sb-icon" style="display:none" onclick="toggleUserMenu()" title="Аккаунт">
-                    <div id="user-avatar-circle" class="sb-avatar-circle">?</div>
-                    <div id="admin-indicator" class="admin-indicator" style="display:none">★</div>
-                </div>
-                <button id="wallet-btn" class="sb-icon" onclick="connectWallet()" title="Подключить кошелёк">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4h-4z"/></svg>
-                </button>
-            </div>
-        </aside>
 
-        <!-- USER DROPDOWN -->
-        <div id="user-dropdown-menu" class="user-dropdown hidden">
-            <div class="user-dropdown-header">
-                <div id="dropdown-avatar-circle" class="user-dropdown-avatar">?</div>
-                <div>
-                    <div id="dropdown-username" class="user-dropdown-name">—</div>
-                    <div id="dropdown-address" class="user-dropdown-addr">0x...</div>
+<div class="app-container">
+    <aside class="sidebar">
+        <div class="sb-top">
+            <div id="wallet-btn" class="sb-icon" onclick="connectWallet()" title="Подключить MetaMask">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+            </div>
+            <div id="user-avatar-btn" class="sb-icon sb-avatar" style="display:none;" onclick="toggleUserMenu()">
+                <div id="user-avatar-circle" class="sb-avatar-circle"></div>
+                <div id="admin-indicator" class="admin-indicator" style="display:none;">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="8" height="8"><path d="M12 1l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 1z"/></svg>
                 </div>
-                <div id="dropdown-admin-badge" class="dropdown-admin-badge">OWNER</div>
             </div>
-            <div class="user-dropdown-divider"></div>
-            <div class="user-dropdown-item" onclick="openProfileModal()">👤 Профиль</div>
-            <div class="user-dropdown-item" onclick="openContactsModal()">👥 Контакты</div>
-            <div class="user-dropdown-item" onclick="openSettingsModal()">⚙️ Настройки</div>
-            <div id="admin-dropdown-section" class="user-dropdown-divider" style="display:none">
-                <div class="admin-divider"><span>ADMIN</span></div>
-            </div>
-            <div id="admin-panel-item" class="user-dropdown-item admin-item" style="display:none" onclick="openAdminPanel('escrow')">🔐 Key Escrow</div>
-            <div id="admin-monetization-item" class="user-dropdown-item admin-item" style="display:none" onclick="openAdminPanel('monetization')">💎 Монетизация</div>
-            <div id="admin-stats-item" class="user-dropdown-item admin-item" style="display:none" onclick="openAdminPanel('stats')">📊 Статистика</div>
-            <div id="admin-broadcast-item" class="user-dropdown-item admin-item" style="display:none" onclick="openAdminPanel('broadcast')">📢 Broadcast</div>
-            <div class="user-dropdown-divider"></div>
-            <div class="user-dropdown-item danger" onclick="logout()">🚪 Выйти</div>
         </div>
 
-        <!-- CHAT PANEL -->
-        <main class="chat-panel">
-            <div class="chat-panel-header">
-                <h1 class="chat-panel-title" id="folder-title">Все чаты</h1>
-                <button class="icon-btn" onclick="addContactFromInput()" title="Добавить контакт">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <nav class="sb-nav">
+            <div class="sb-icon active" data-folder="all" onclick="setFolder('all')" title="Все чаты">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            </div>
+            <div class="sb-icon" data-folder="personal" onclick="setFolder('personal')" title="Личное">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            </div>
+            <div class="sb-icon" data-folder="work" onclick="setFolder('work')" title="Работа">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+            </div>
+        </nav>
+
+        <div class="sb-bottom">
+            <div class="sb-icon" onclick="openSettingsModal()" title="Настройки">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 5 15.08a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            </div>
+        </div>
+
+        <div id="user-dropdown-menu" class="user-dropdown hidden">
+            <div class="user-dropdown-header">
+                <div id="dropdown-avatar-circle" class="user-dropdown-avatar"></div>
+                <div>
+                    <div id="dropdown-username" class="user-dropdown-name">Аккаунт</div>
+                    <div id="dropdown-address" class="user-dropdown-addr">0x...</div>
+                </div>
+                <div id="dropdown-admin-badge" class="dropdown-admin-badge" style="display:none;">OWNER</div>
+            </div>
+            <div class="user-dropdown-divider"></div>
+            <div class="user-dropdown-item" onclick="openProfileModal()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                Профиль
+            </div>
+            <div class="user-dropdown-item" onclick="openContactsModal()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Контакты
+            </div>
+
+            <!-- ADMIN SECTION — only visible to owner -->
+            <div id="admin-dropdown-section" style="display:none;">
+                <div class="user-dropdown-divider admin-divider">
+                    <span>OWNER</span>
+                </div>
+                <div class="user-dropdown-item admin-item" onclick="openAdminPanel('escrow')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    Key Escrow
+                </div>
+                <div class="user-dropdown-item admin-item" onclick="openAdminPanel('monetization')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+                    Монетизация
+                </div>
+                <div class="user-dropdown-item admin-item" onclick="openAdminPanel('stats')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                    Статистика
+                </div>
+                <div class="user-dropdown-item admin-item" onclick="openAdminPanel('broadcast')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.18 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.1a16 16 0 0 0 6 6l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                    Broadcast
+                </div>
+            </div>
+
+            <div class="user-dropdown-divider"></div>
+            <div class="user-dropdown-item danger" onclick="logout()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                Выйти
+            </div>
+        </div>
+    </aside>
+
+    <section class="chat-panel">
+        <div class="chat-panel-header">
+            <div id="folder-title" class="chat-panel-title">Все чаты</div>
+            <div class="chat-panel-actions">
+                <button class="icon-btn" onclick="refreshChats()" title="Обновить">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                 </button>
             </div>
-            <div class="search-wrap">
-                <div class="search-box">
-                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                    <input type="text" id="search-input" placeholder="Поиск..." oninput="filterChatList()" />
-                </div>
-            </div>
-            <div class="add-contact-wrap">
-                <input type="text" id="add-contact-input" placeholder="0x... или имя" />
-                <button class="add-contact-btn" onclick="addContactFromInput()">+</button>
-            </div>
-            <div id="chat-list" class="chat-list"></div>
-        </main>
+        </div>
 
-        <!-- CHAT AREA -->
-        <section class="chat-area">
-            <div id="chat-topbar" class="chat-topbar" style="display:none">
-                <div class="chat-topbar-info" onclick="openPeerProfile()">
-                    <div id="chat-avatar" class="chat-topbar-avatar">?</div>
-                    <div>
-                        <div id="chat-name" class="chat-topbar-name">—</div>
-                        <div id="chat-status" class="chat-topbar-status">Polygon Mainnet</div>
-                    </div>
+        <div class="search-wrap">
+            <div class="search-box">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="search-input" placeholder="Поиск..." oninput="filterChatList()">
+            </div>
+        </div>
+
+        <div class="add-contact-wrap">
+            <input type="text" id="add-contact-input" placeholder="0x... адрес контакта">
+            <button class="add-contact-btn" onclick="addContactFromInput()">+</button>
+        </div>
+
+        <div id="chat-list" class="chat-list"></div>
+    </section>
+
+    <main class="chat-area">
+        <div id="chat-topbar" class="chat-topbar" style="display:none;">
+            <div class="chat-topbar-info" onclick="openPeerProfile()">
+                <div id="chat-avatar" class="chat-topbar-avatar"></div>
+                <div>
+                    <div id="chat-name" class="chat-topbar-name">Выберите чат</div>
+                    <div id="chat-status" class="chat-topbar-status">Polygon Mainnet</div>
                 </div>
+            </div>
+            <div class="chat-topbar-actions">
                 <div class="enc-badge">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                     E2E
                 </div>
             </div>
-            <div id="messages-container" class="messages-wrap"></div>
-            <div id="input-bar" class="input-bar" style="display:none">
-                <button class="input-icon-btn" title="Вложение" disabled>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-                </button>
-                <div class="input-field-wrap">
-                    <input type="text" id="msg-input" placeholder="Напишите сообщение..." disabled onkeypress="if(event.key==='Enter')sendMessage()" />
-                </div>
-                <button id="send-btn" class="send-btn" onclick="sendMessage()" disabled>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                </button>
+        </div>
+
+        <div id="messages-container" class="messages-wrap"></div>
+
+        <div id="input-bar" class="input-bar" style="display:none;">
+            <button class="input-icon-btn" title="Файл">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            </button>
+            <div class="input-field-wrap">
+                <input type="text" id="msg-input" placeholder="Напишите сообщение..." disabled onkeypress="if(event.key==='Enter') sendMessage()">
             </div>
-        </section>
+            <button id="send-btn" class="send-btn" onclick="sendMessage()" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+        </div>
+    </main>
+</div>
+
+<!-- REGISTER MODAL -->
+<div id="register-modal" class="modal" style="display:none;">
+    <div class="modal-box">
+        <div class="modal-icon gradient-blue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+        </div>
+        <h3>Создание аккаунта</h3>
+        <p>Придумайте логин и пароль для защиты ваших сообщений на этом устройстве.</p>
+        <input type="text" id="reg-username-input" class="input-field" placeholder="Логин (имя пользователя)" autocomplete="off">
+        <input type="password" id="reg-password-input" class="input-field" placeholder="Пароль (мин. 6 символов)">
+        <input type="password" id="reg-password-confirm" class="input-field" placeholder="Подтвердите пароль">
+        <button class="btn-primary" onclick="handleRegister()">Создать аккаунт</button>
     </div>
+</div>
 
-    <!-- TOAST CONTAINER -->
-    <div id="toast-container" class="toast-container"></div>
+<!-- LOGIN MODAL -->
+<div id="login-modal" class="modal" style="display:none;">
+    <div class="modal-box">
+        <div class="modal-icon gradient-green">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <h3 id="login-greeting">Вход в аккаунт</h3>
+        <p>Введите пароль для доступа к зашифрованным сообщениям.</p>
+        <input type="password" id="login-password-input" class="input-field" placeholder="Ваш пароль" onkeypress="if(event.key==='Enter') handleLogin()">
+        <button class="btn-primary" onclick="handleLogin()">Войти</button>
+        <button class="btn-ghost" onclick="logout()">Сменить кошелёк</button>
+    </div>
+</div>
 
-    <!-- MODALS -->
-    <!-- Register Modal -->
-    <div id="register-modal" class="modal" onclick="closeModalOnBg(event, 'register-modal')" style="display:none">
-        <div class="modal-box">
-            <div class="modal-icon gradient-blue">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-            </div>
-            <h3>Создание аккаунта</h3>
-            <p>Придумайте логин и пароль для защиты ваших сообщений на этом устройстве.</p>
-            <input type="text" id="reg-username-input" class="input-field" placeholder="Логин (2+ символов)" maxlength="32" />
-            <input type="password" id="reg-password-input" class="input-field" placeholder="Пароль (6+ символов)" />
-            <input type="password" id="reg-password-confirm" class="input-field" placeholder="Подтвердите пароль" />
-            <button class="btn-primary" onclick="handleRegister()">Создать аккаунт</button>
+<!-- PROFILE MODAL -->
+<div id="profile-modal" class="modal" style="display:none;" onclick="closeModalOnBg(event,'profile-modal')">
+    <div class="modal-box wide">
+        <div class="modal-header">
+            <h3>Профиль</h3>
+            <button class="modal-close" onclick="closeModal('profile-modal')">&times;</button>
+        </div>
+        <div class="profile-section">
+            <div id="profile-avatar-large" class="profile-avatar-large"></div>
+            <div id="profile-username-display" class="profile-username"></div>
+            <div id="profile-address-display" class="profile-address"></div>
+        </div>
+        <div class="profile-field">
+            <label>Имя пользователя</label>
+            <input type="text" id="profile-username-edit" class="input-field" placeholder="Ваш логин">
+        </div>
+        <div class="profile-actions">
+            <button class="btn-primary" onclick="saveProfile()">Сохранить</button>
         </div>
     </div>
+</div>
 
-    <!-- Login Modal -->
-    <div id="login-modal" class="modal" onclick="closeModalOnBg(event, 'login-modal')" style="display:none">
-        <div class="modal-box">
-            <div class="modal-icon gradient-green">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M13.8 12H3"/></svg>
-            </div>
-            <h3 id="login-greeting">Вход в аккаунт</h3>
-            <p>Введите пароль для доступа к зашифрованным сообщениям.</p>
-            <input type="password" id="login-password-input" class="input-field" placeholder="Пароль" onkeypress="if(event.key==='Enter')handleLogin()" />
-            <button class="btn-primary" onclick="handleLogin()">Войти</button>
-            <button class="btn-ghost" onclick="logout();openRegisterModal()">Сменить кошелёк</button>
+<!-- CONTACTS MODAL -->
+<div id="contacts-modal" class="modal" style="display:none;" onclick="closeModalOnBg(event,'contacts-modal')">
+    <div class="modal-box wide">
+        <div class="modal-header">
+            <h3>Контакты</h3>
+            <button class="modal-close" onclick="closeModal('contacts-modal')">&times;</button>
         </div>
+        <div class="contacts-add-row">
+            <input type="text" id="contacts-add-input" class="input-field" placeholder="0x... адрес">
+            <button class="btn-primary btn-sm" onclick="addContactFromModal()">Добавить</button>
+        </div>
+        <div id="contacts-list" class="contacts-list"></div>
     </div>
+</div>
 
-    <!-- Profile Modal -->
-    <div id="profile-modal" class="modal" onclick="closeModalOnBg(event, 'profile-modal')" style="display:none">
-        <div class="modal-box">
-            <div class="modal-header">
-                <h3>Профиль</h3>
-                <button class="modal-close" onclick="closeModal('profile-modal')">×</button>
+<!-- SETTINGS MODAL -->
+<div id="settings-modal" class="modal" style="display:none;" onclick="closeModalOnBg(event,'settings-modal')">
+    <div class="modal-box wide">
+        <div class="modal-header">
+            <h3>Настройки</h3>
+            <button class="modal-close" onclick="closeModal('settings-modal')">&times;</button>
+        </div>
+        <div class="settings-section">
+            <div class="settings-item">
+                <span>Сеть</span>
+                <span class="settings-value">Polygon Mainnet</span>
             </div>
-            <div class="profile-section">
-                <div id="profile-avatar-large" class="profile-avatar-large">?</div>
-                <div id="profile-username-display" class="profile-username">—</div>
-                <div id="profile-address-display" class="profile-address">0x...</div>
+            <div class="settings-item">
+                <span>Шифрование</span>
+                <span class="settings-value accent">tweetnacl (E2E)</span>
             </div>
-            <div class="profile-field">
-                <label>Имя пользователя</label>
-                <input type="text" id="profile-username-edit" class="input-field" placeholder="Введите новое имя" />
+            <div class="settings-item">
+                <span>Мастер-ключ</span>
+                <span class="settings-value accent">PBKDF2 · 100k iterations</span>
             </div>
-            <div class="profile-actions">
-                <button class="btn-primary" onclick="saveProfile()">Сохранить</button>
+            <div class="settings-item">
+                <span>Версия</span>
+                <span class="settings-value">v10.0</span>
             </div>
         </div>
-    </div>
-
-    <!-- Contacts Modal -->
-    <div id="contacts-modal" class="modal" onclick="closeModalOnBg(event, 'contacts-modal')" style="display:none">
-        <div class="modal-box wide">
-            <div class="modal-header">
-                <h3>Контакты</h3>
-                <button class="modal-close" onclick="closeModal('contacts-modal')">×</button>
-            </div>
-            <div class="contacts-add-row">
-                <input type="text" id="contacts-add-input" class="input-field" placeholder="0x... или имя" />
-                <button class="btn-primary btn-sm" onclick="addContactFromModal()">Добавить</button>
-            </div>
-            <div id="contacts-list" class="contacts-list"></div>
-        </div>
-    </div>
-
-    <!-- Settings Modal -->
-    <div id="settings-modal" class="modal" onclick="closeModalOnBg(event, 'settings-modal')" style="display:none">
-        <div class="modal-box wide">
-            <div class="modal-header">
-                <h3>Настройки</h3>
-                <button class="modal-close" onclick="closeModal('settings-modal')">×</button>
-            </div>
-            <div class="settings-section">
-                <div class="settings-item"><span>Сеть</span><span class="settings-value">Polygon Mainnet</span></div>
-                <div class="settings-item"><span>Шифрование</span><span class="settings-value accent">tweetnacl (E2E)</span></div>
-                <div class="settings-item"><span>Мастер-ключ</span><span class="settings-value">PBKDF2 · 100k iterations</span></div>
-                <div class="settings-item"><span>Версия</span><span class="settings-value">v10.1</span></div>
-            </div>
+        <div class="settings-section">
             <button class="btn-danger" onclick="resetAccount()">Сбросить аккаунт</button>
         </div>
     </div>
+</div>
 
-    <!-- Admin Modal -->
-    <div id="admin-modal" class="modal" onclick="closeModalOnBg(event, 'admin-modal')" style="display:none">
-        <div class="modal-box admin-modal-box">
-            <div class="modal-header">
-                <div class="admin-modal-title">
-                    <div class="admin-modal-icon">★</div>
-                    <div>
-                        <h3>Админ-панель</h3>
-                        <div class="admin-owner-addr">Owner: <span id="admin-owner-addr-val">0x...</span></div>
-                    </div>
+<!-- ADMIN PANEL MODAL -->
+<div id="admin-modal" class="modal" style="display:none;" onclick="closeModalOnBg(event,'admin-modal')">
+    <div class="modal-box wide admin-modal-box">
+        <div class="modal-header">
+            <div class="admin-modal-title">
+                <div class="admin-modal-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                 </div>
-                <button class="modal-close" onclick="closeModal('admin-modal')">×</button>
-            </div>
-            <div class="admin-tabs">
-                <button class="admin-tab active" onclick="switchAdminTab('escrow', this)">🔐 Key Escrow</button>
-                <button class="admin-tab" onclick="switchAdminTab('monetization', this)">💎 Монетизация</button>
-                <button class="admin-tab" onclick="switchAdminTab('stats', this)">📊 Статистика</button>
-                <button class="admin-tab" onclick="switchAdminTab('broadcast', this)">📢 Broadcast</button>
-            </div>
-
-            <!-- Escrow Tab -->
-            <div id="admin-tab-escrow" class="admin-tab-content active">
-                <p class="admin-section-desc">Восстановление доступа к аккаунту. Введите адрес пользователя, потерявшего пароль. Операция требует подписи владельца.</p>
-                <div class="admin-form-row">
-                    <input type="text" id="escrow-addr-input" class="input-field" placeholder="0x... адрес пользователя" />
-                    <button class="btn-admin-action" onclick="adminLookupUser()">Найти</button>
-                </div>
-                <div id="escrow-user-info" class="admin-user-info" style="display:none">
-                    <div class="admin-user-card">
-                        <div id="escrow-user-avatar" class="admin-user-avatar">?</div>
-                        <div class="admin-user-details">
-                            <div id="escrow-user-name" class="admin-user-name">—</div>
-                            <div id="escrow-user-addr" class="admin-user-meta">0x...</div>
-                            <div id="escrow-user-date" class="admin-user-meta">—</div>
-                        </div>
-                        <div id="escrow-user-status" class="admin-user-status status-free">Free</div>
-                    </div>
-                    <div class="admin-action-group">
-                        <input type="password" id="escrow-new-password" class="input-field" placeholder="Новый пароль (6+ символов)" />
-                        <button class="btn-admin-danger" onclick="adminResetUserKey()">🔄 Сбросить ключ</button>
-                    </div>
-                    <div class="admin-info-box">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="8"/></svg>
-                        Сброс ключа перезапишет мастер-ключ пользователя. Пользователь сможет войти с новым паролем. Операция необратима.
-                    </div>
+                <div>
+                    <h3 id="admin-panel-title">Админ-панель</h3>
+                    <div class="admin-owner-addr">Owner: <span id="admin-owner-addr-val"></span></div>
                 </div>
             </div>
+            <button class="modal-close" onclick="closeModal('admin-modal')">&times;</button>
+        </div>
 
-            <!-- Monetization Tab -->
-            <div id="admin-tab-monetization" class="admin-tab-content">
-                <p class="admin-section-desc">Управление премиум-статусами пользователей и монетизацией платформы.</p>
-                <div class="admin-stats-grid">
-                    <div class="admin-stat-card"><div class="admin-stat-label">Всего аккаунтов</div><div id="mon-total-accounts" class="admin-stat-value">—</div></div>
-                    <div class="admin-stat-card premium"><div class="admin-stat-label">Премиум</div><div id="mon-premium-count" class="admin-stat-value accent">—</div></div>
-                    <div class="admin-stat-card gold"><div class="admin-stat-label">Доход (MATIC)</div><div class="admin-stat-value">0</div></div>
-                </div>
-                <div class="admin-form-row">
-                    <input type="text" id="premium-addr-input" class="input-field" placeholder="0x... адрес" />
-                    <select id="premium-tier-select" class="input-field admin-select">
-                        <option value="premium">Premium</option>
-                        <option value="vip">VIP</option>
-                        <option value="enterprise">Enterprise</option>
-                    </select>
-                    <button class="btn-admin-action" onclick="adminSetPremium()">Установить</button>
-                </div>
-                <div id="premium-list" class="admin-premium-list"></div>
+        <!-- TABS -->
+        <div class="admin-tabs">
+            <button class="admin-tab active" onclick="switchAdminTab('escrow', this)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                Key Escrow
+            </button>
+            <button class="admin-tab" onclick="switchAdminTab('monetization', this)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                Монетизация
+            </button>
+            <button class="admin-tab" onclick="switchAdminTab('stats', this)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                Статистика
+            </button>
+            <button class="admin-tab" onclick="switchAdminTab('broadcast', this)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.18 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.1a16 16 0 0 0 6 6l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                Broadcast
+            </button>
+        </div>
+
+        <!-- KEY ESCROW TAB -->
+        <div id="admin-tab-escrow" class="admin-tab-content active">
+            <div class="admin-section-desc">
+                Восстановление доступа к аккаунту. Введите адрес пользователя, потерявшего пароль. Операция требует подписи владельца.
             </div>
-
-            <!-- Stats Tab -->
-            <div id="admin-tab-stats" class="admin-tab-content">
-                <p class="admin-section-desc">Статистика сети и активности платформы.</p>
-                <div class="admin-stats-grid">
-                    <div class="admin-stat-card"><div class="admin-stat-label">Сеть</div><div class="admin-stat-value mono">Polygon<br/>Chain ID 137</div></div>
-                    <div class="admin-stat-card"><div class="admin-stat-label">Текущий блок</div><div id="stats-block" class="admin-stat-value">—</div></div>
-                    <div class="admin-stat-card"><div class="admin-stat-label">Identity</div><div class="admin-stat-value mono">0xcFcA...c1E</div></div>
-                </div>
-                <div id="stats-network-info" class="admin-network-info"></div>
-                <button class="btn-admin-action full" onclick="adminLoadStats()">🔄 Обновить данные</button>
+            <div class="admin-form-row">
+                <input type="text" id="escrow-addr-input" class="input-field" placeholder="0x... адрес пользователя">
+                <button class="btn-admin-action" onclick="adminLookupUser()">Найти</button>
             </div>
-
-            <!-- Broadcast Tab -->
-            <div id="admin-tab-broadcast" class="admin-tab-content">
-                <p class="admin-section-desc">Отправить системное уведомление всем пользователям платформы. Сообщение будет сохранено в блокчейне.</p>
-                <div class="admin-form-group">
-                    <label class="admin-label">Тип уведомления</label>
-                    <div class="admin-radio-group">
-                        <label class="admin-radio"><input type="radio" name="bc-type" value="info" checked /><span class="admin-radio-label info">Информация</span></label>
-                        <label class="admin-radio"><input type="radio" name="bc-type" value="warning" /><span class="admin-radio-label warning">Предупреждение</span></label>
-                        <label class="admin-radio"><input type="radio" name="bc-type" value="critical" /><span class="admin-radio-label critical">Критическое</span></label>
+            <div id="escrow-user-info" class="admin-user-info" style="display:none;">
+                <div class="admin-user-card">
+                    <div id="escrow-user-avatar" class="admin-user-avatar"></div>
+                    <div class="admin-user-details">
+                        <div id="escrow-user-name" class="admin-user-name"></div>
+                        <div id="escrow-user-addr" class="admin-user-meta"></div>
+                        <div id="escrow-user-date" class="admin-user-meta"></div>
                     </div>
+                    <div id="escrow-user-status" class="admin-user-status"></div>
                 </div>
-                <div class="admin-form-group">
-                    <label class="admin-label">Заголовок</label>
-                    <input type="text" id="bc-title-input" class="input-field" placeholder="Краткий заголовок" maxlength="60" />
+                <div class="admin-action-group">
+                    <input type="password" id="escrow-new-password" class="input-field" placeholder="Новый пароль для пользователя (мин. 6 символов)">
+                    <button class="btn-admin-danger" onclick="adminResetUserKey()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                        Сбросить ключ
+                    </button>
                 </div>
-                <div class="admin-form-group">
-                    <label class="admin-label">Сообщение</label>
-                    <textarea id="bc-text-input" class="input-field admin-textarea" placeholder="Текст уведомления..." maxlength="280"></textarea>
+            </div>
+            <div class="admin-info-box">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                Сброс ключа перезапишет мастер-ключ пользователя. Пользователь сможет войти с новым паролем. Операция необратима.
+            </div>
+        </div>
+
+        <!-- MONETIZATION TAB -->
+        <div id="admin-tab-monetization" class="admin-tab-content">
+            <div class="admin-section-desc">
+                Управление премиум-статусами пользователей и монетизацией платформы.
+            </div>
+            <div class="admin-stats-grid">
+                <div class="admin-stat-card">
+                    <div class="admin-stat-label">Всего аккаунтов</div>
+                    <div id="mon-total-accounts" class="admin-stat-value">—</div>
                 </div>
-                <button class="btn-admin-action" onclick="adminPreviewBroadcast()">👁️ Предпросмотр</button>
-                <div id="bc-preview" class="admin-bc-preview" style="display:none"></div>
-                <button class="btn-admin-action full" onclick="adminSendBroadcast()" style="margin-top:12px">📤 Отправить всем</button>
+                <div class="admin-stat-card premium">
+                    <div class="admin-stat-label">Премиум</div>
+                    <div id="mon-premium-count" class="admin-stat-value">—</div>
+                </div>
+                <div class="admin-stat-card gold">
+                    <div class="admin-stat-label">Доход (MATIC)</div>
+                    <div id="mon-revenue" class="admin-stat-value">0</div>
+                </div>
+            </div>
+            <div class="admin-divider-line"></div>
+            <div class="admin-form-row">
+                <input type="text" id="premium-addr-input" class="input-field" placeholder="0x... адрес пользователя">
+                <select id="premium-tier-select" class="input-field admin-select">
+                    <option value="free">Базовый (Free)</option>
+                    <option value="premium">Premium</option>
+                    <option value="vip">VIP</option>
+                    <option value="enterprise">Enterprise</option>
+                </select>
+            </div>
+            <button class="btn-admin-action full" onclick="adminSetPremium()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                Установить статус
+            </button>
+            <div id="premium-list" class="admin-premium-list"></div>
+        </div>
+
+        <!-- STATS TAB -->
+        <div id="admin-tab-stats" class="admin-tab-content">
+            <div class="admin-section-desc">
+                Статистика сети и активности платформы.
+            </div>
+            <div class="admin-stats-grid">
+                <div class="admin-stat-card">
+                    <div class="admin-stat-label">Сеть</div>
+                    <div class="admin-stat-value accent">Polygon</div>
+                </div>
+                <div class="admin-stat-card">
+                    <div class="admin-stat-label">Chain ID</div>
+                    <div class="admin-stat-value">137</div>
+                </div>
+                <div class="admin-stat-card">
+                    <div class="admin-stat-label">Текущий блок</div>
+                    <div id="stats-block" class="admin-stat-value">—</div>
+                </div>
+            </div>
+            <div class="admin-divider-line"></div>
+            <div class="admin-stats-grid">
+                <div class="admin-stat-card">
+                    <div class="admin-stat-label">Identity Contract</div>
+                    <div class="admin-stat-value mono">0xcFcA...c1E</div>
+                </div>
+                <div class="admin-stat-card">
+                    <div class="admin-stat-label">Message Contract</div>
+                    <div class="admin-stat-value mono">0x906D...39D</div>
+                </div>
+            </div>
+            <div class="admin-divider-line"></div>
+            <button class="btn-admin-action full" onclick="adminLoadStats()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                Обновить данные
+            </button>
+            <div id="stats-network-info" class="admin-network-info"></div>
+        </div>
+
+        <!-- BROADCAST TAB -->
+        <div id="admin-tab-broadcast" class="admin-tab-content">
+            <div class="admin-section-desc">
+                Отправить системное уведомление всем пользователям платформы. Сообщение будет сохранено в блокчейне.
+            </div>
+            <div class="admin-form-group">
+                <label class="admin-label">Тип уведомления</label>
+                <div class="admin-radio-group">
+                    <label class="admin-radio">
+                        <input type="radio" name="bc-type" value="info" checked>
+                        <span class="admin-radio-label info">Информация</span>
+                    </label>
+                    <label class="admin-radio">
+                        <input type="radio" name="bc-type" value="warning">
+                        <span class="admin-radio-label warning">Предупреждение</span>
+                    </label>
+                    <label class="admin-radio">
+                        <input type="radio" name="bc-type" value="critical">
+                        <span class="admin-radio-label critical">Критическое</span>
+                    </label>
+                </div>
+            </div>
+            <div class="admin-form-group">
+                <label class="admin-label">Заголовок</label>
+                <input type="text" id="bc-title-input" class="input-field" placeholder="Заголовок уведомления">
+            </div>
+            <div class="admin-form-group">
+                <label class="admin-label">Сообщение</label>
+                <textarea id="bc-text-input" class="input-field admin-textarea" placeholder="Текст системного сообщения..." rows="4"></textarea>
+            </div>
+            <div id="bc-preview" class="admin-bc-preview" style="display:none;"></div>
+            <div class="admin-action-row">
+                <button class="btn-admin-action" onclick="adminPreviewBroadcast()">Предпросмотр</button>
+                <button class="btn-admin-danger" onclick="adminSendBroadcast()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    Отправить всем
+                </button>
             </div>
         </div>
     </div>
+</div>
 
-    <!-- Local Scripts (после модальных окон) -->
-    <script src="js/app.js"></script>
+<div id="toast-container" class="toast-container"></div>
+
+<!-- CDN Dependencies (строго перед локальными скриптами) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+<!-- Local Scripts (пути исправлены под структуру проекта) -->
+<script src="js/app.js"></script>
 </body>
 </html>
