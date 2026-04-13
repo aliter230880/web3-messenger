@@ -10,7 +10,7 @@
 <body>
 
 <div class="app-container">
-    <!-- ══════════════ LEFT SIDEBAR (Icon Rail) ══════════════ -->
+    <!-- LEFT SIDEBAR -->
     <aside class="sidebar">
         <div class="sb-top">
             <div id="wallet-btn" class="sb-icon" onclick="connectWallet()" title="Подключить MetaMask">
@@ -49,7 +49,7 @@
             </div>
         </div>
 
-        <!-- Dropdown Menu -->
+        <!-- Dropdown -->
         <div id="user-dropdown-menu" class="user-dropdown hidden">
             <div class="user-dropdown-header">
                 <div id="dropdown-avatar-circle" class="user-dropdown-avatar"></div>
@@ -116,9 +116,7 @@
             </div>
         </div>
 
-        <div id="messages-container" class="messages-wrap">
-            <!-- Welcome screen -->
-        </div>
+        <div id="messages-container" class="messages-wrap"></div>
 
         <div class="input-bar">
             <button class="input-icon-btn" title="Прикрепить файл">
@@ -151,8 +149,7 @@
     </div>
 </div>
 
-<!-- Остальные модалки (register, share, profile, contacts, settings, admin) — вставьте из вашего последнего index.html -->
-
+<!-- Toast -->
 <div id="toast-container" class="toast-container"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
