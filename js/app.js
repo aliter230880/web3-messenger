@@ -1,4 +1,4 @@
-// Web3 Messenger v9.6 — Master Key + Password Auth (финальная версия)
+// Web3 Messenger v9.6 — Master Key + Password Auth (полностью рабочая версия)
 console.log('🚀 Web3 Messenger v9.6 — Master Key + Password Auth');
 
 const ADMIN_ADDRESS = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
@@ -84,10 +84,6 @@ async function decrypt(encBase64, peer) {
         const dec = nacl.secretbox.open(box, nonce, key);
         return dec ? new TextDecoder().decode(dec) : "🔒 Ошибка расшифровки";
     } catch(e) { return "🔒 Нет доступа"; }
-}
-
-function isValidBase64(str) {
-    try { return btoa(atob(str)) === str; } catch { return false; }
 }
 
 // ====================== UI HELPERS ======================
