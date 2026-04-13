@@ -151,6 +151,10 @@ svg { display: block; }
 .chat-item-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
 .chat-item-time { font-size: 11px; color: var(--text-muted); }
 .chat-item-unread { min-width: 22px; height: 22px; border-radius: 11px; background: var(--accent-gradient); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; padding: 0 6px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3); }
+.chat-delete-btn { display: none; background: none; border: none; color: var(--red); font-size: 18px; cursor: pointer; padding: 0 2px; line-height: 1; opacity: 0.6; transition: opacity 0.2s; }
+.chat-delete-btn:hover { opacity: 1; }
+.chat-item:hover .chat-delete-btn { display: block; }
+.chat-item:hover .chat-item-time { display: none; }
 
 /* STATUS BAR */
 .status-bar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-top: 1px solid var(--border); background: rgba(17, 24, 39, 0.6); }
