@@ -51,7 +51,7 @@ body {
 
 svg { display:block; }
 
-/* ─── Layout ────────────────────────────────────────────────────────────── */
+/* ─── Layout ─────────────────────────────────────────────────────────────── */
 .app-container {
     display: flex;
     height: 100vh;
@@ -726,7 +726,7 @@ svg { display:block; }
 .settings-divider { height:1px; background:var(--border); margin:14px 0; }
 .contract-info  { font-family:monospace; font-size:10px; color:var(--text-muted); line-height:2; word-break:break-all; }
 
-/* ─── Toast ──────────────────────────────────────────────────────────────── */
+/* ─── Toast ─────────────────────────────────────────────────────────────── */
 .toast-container {
     position:fixed; bottom:28px; left:50%; transform:translateX(-50%);
     display:flex; flex-direction:column; gap:8px;
