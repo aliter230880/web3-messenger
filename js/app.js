@@ -1,17 +1,27 @@
-console.log('Web3 Messenger v10.1 — Admin Panel + E2E Encrypted');
+console.log('Web3 Messenger v10.2 — Auto-refresh + Nicknames');
 
 const ADMIN_ADDRESS = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
 const IDENTITY_CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
 const MESSAGE_CONTRACT_ADDRESS = "0x906DCA5190841d5F0acF8244bd8c176ecb24139D";
 const REQUIRED_CHAIN_ID = 137;
 const MESSAGES_PER_PAGE = 50;
-const SCAN_BLOCKS_BACK = 10000;
+const SCAN_BLOCKS_BACK = 50000;
+const POLL_INTERVAL = 5000;
 
 const MESSAGE_ABI = [
     "function sendMessage(address recipient, string text, bytes signature) external",
     "function getConversation(address userA, address userB, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, uint256 timestamp, bytes signature)[], uint256)",
     "function messageCount(address a, address b) view returns (uint256)",
     "event MessageSent(address indexed sender, address indexed recipient, uint256 timestamp)"
+];
+
+const MSG_ABI_VARIANTS = [
+    ["function getConversation(address,address,uint256,uint256) view returns (tuple(address sender, address recipient, string text, uint256 timestamp, bytes signature)[], uint256)"],
+    ["function getConversation(address,address,uint256,uint256) view returns (tuple(address sender, address recipient, string text, uint256 timestamp)[], uint256)"],
+    ["function getConversation(address,address,uint256,uint256) view returns (tuple(address sender, address recipient, string text, uint256 timestamp, bytes signature)[])"],
+    ["function getConversation(address,address,uint256,uint256) view returns (tuple(address sender, address recipient, string text, uint256 timestamp)[])"],
+    ["function getConversation(address,address,uint256,uint256) view returns (tuple(address sender, address recipient, string text, uint256 timestamp, string signature)[], uint256)"],
+    ["function getConversation(address,address,uint256,uint256) view returns (tuple(uint256 id, address sender, address recipient, string text, uint256 timestamp, bytes signature)[], uint256)"],
 ];
 
 const IDENTITY_ABI = [
@@ -27,6 +37,9 @@ let currentUsername = '';
 let isAuthenticated = false;
 let isAdmin = false;
 let currentFilter = 'all';
+let pollTimer = null;
+let isPolling = false;
+const nicknameCache = {};
 
 const store = { chats: [], currentChat: null, currentFolder: 'all', messages: {} };
 
@@ -147,6 +160,41 @@ async function decrypt(encBase64, peer) {
         if (!dec) return null;
         return new TextDecoder().decode(dec);
     } catch (e) { return null; }
+}
+
+// ====================== NICKNAME RESOLVER ======================
+async function resolveNickname(addr) {
+    const key = addr.toLowerCase();
+    if (nicknameCache[key]) return nicknameCache[key];
+    try {
+        if (identityContract) {
+            const profile = await identityContract.getProfile(addr);
+            const username = profile[0];
+            if (username && username.trim().length > 0) {
+                nicknameCache[key] = username.trim();
+                return nicknameCache[key];
+            }
+        }
+    } catch(e) {}
+    const localAccount = getAccountData(addr);
+    if (localAccount && localAccount.username) {
+        nicknameCache[key] = localAccount.username;
+        return nicknameCache[key];
+    }
+    return null;
+}
+
+async function resolveAndUpdateContact(addr) {
+    const nick = await resolveNickname(addr);
+    if (nick) {
+        const contact = contactsStore.find(addr);
+        if (contact && (contact.name === shortAddr(addr) || !contact.name)) {
+            contact.name = nick + ' (' + shortAddr(addr) + ')';
+            contactsStore.save();
+            return true;
+        }
+    }
+    return false;
 }
 
 // ====================== ACCOUNT DATA ======================
@@ -305,6 +353,7 @@ function renderChatList() {
             '<div class="chat-item-meta">' +
                 (lastTime ? '<div class="chat-item-time">' + lastTime + '</div>' : '') +
                 (unread > 0 ? '<div class="chat-item-unread">' + unread + '</div>' : '') +
+                '<button class="chat-delete-btn" onclick="event.stopPropagation();deleteChat(\'' + c.address + '\')" title="Удалить чат">&times;</button>' +
             '</div>' +
         '</div>';
     }).join('');
@@ -331,7 +380,7 @@ async function selectChat(addr) {
     await loadMessages(addr);
 }
 
-async function loadMessages(addr) {
+async function loadMessages(addr, silent) {
     const container = document.getElementById('messages-container');
     const topbar = document.getElementById('chat-topbar');
     const inputBar = document.getElementById('input-bar');
@@ -348,11 +397,13 @@ async function loadMessages(addr) {
     document.getElementById('msg-input').disabled = false;
     document.getElementById('send-btn').disabled = false;
 
-    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;"><div class="loading-spinner"></div></div>';
+    if (!silent) {
+        container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;"><div class="loading-spinner"></div></div>';
+    }
 
     try {
         if (!messageContract) {
-            container.innerHTML = '<div class="empty-state"><h3>Контракт не подключён</h3><p>Подключитесь к Polygon Mainnet.</p></div>';
+            if (!silent) container.innerHTML = '<div class="empty-state"><h3>Контракт не подключён</h3><p>Подключитесь к Polygon Mainnet.</p></div>';
             return;
         }
 
@@ -361,57 +412,103 @@ async function loadMessages(addr) {
 
         if (total === 0) {
             store.messages[addr.toLowerCase()] = [];
-            container.innerHTML = '<div class="empty-state"><p>Нет сообщений. Начните общение!</p></div>';
+            if (!silent) container.innerHTML = '<div class="empty-state"><p>Нет сообщений. Начните общение!</p></div>';
             return;
         }
 
         const start = Math.max(0, total - MESSAGES_PER_PAGE);
-        let rawMsgs;
-        try {
-            const result = await messageContract.getConversation(userAddress, addr, start, MESSAGES_PER_PAGE);
-            rawMsgs = Array.isArray(result) ? result : (result[0] || []);
-        } catch (decodeErr) {
-            const iface = new ethers.utils.Interface(MESSAGE_ABI);
-            const callData = iface.encodeFunctionData('getConversation', [userAddress, addr, start, MESSAGES_PER_PAGE]);
-            const raw = await provider.call({ to: MESSAGE_CONTRACT_ADDRESS, data: callData });
-            try {
-                const decoded = iface.decodeFunctionResult('getConversation', raw);
-                rawMsgs = Array.isArray(decoded[0]) ? decoded[0] : [];
-            } catch (e2) {
-                const altAbi = ["function getConversation(address,address,uint256,uint256) view returns (tuple(address sender, address recipient, string text, uint256 timestamp, bytes signature)[])"];
-                const altIface = new ethers.utils.Interface(altAbi);
-                try {
-                    const decoded2 = altIface.decodeFunctionResult('getConversation', raw);
-                    rawMsgs = Array.isArray(decoded2[0]) ? decoded2[0] : [];
-                } catch (e3) {
-                    console.error('All decode attempts failed', e3);
-                    rawMsgs = [];
-                }
-            }
-        }
+        const rawMsgs = await fetchConversation(userAddress, addr, start, MESSAGES_PER_PAGE);
 
         const messages = [];
         for (const m of rawMsgs) {
-            const isMine = m.sender.toLowerCase() === userAddress.toLowerCase();
-            const peer = isMine ? m.recipient : m.sender;
-            let text = await decrypt(m.text, peer);
-            if (!text) text = m.text;
+            let senderAddr, recipientAddr, text, timestamp;
+            if (m.sender) {
+                senderAddr = m.sender;
+                recipientAddr = m.recipient;
+                text = m.text;
+                timestamp = typeof m.timestamp === 'object' ? m.timestamp.toNumber() : Number(m.timestamp);
+            } else {
+                const vals = Object.values(m);
+                senderAddr = vals.find(v => typeof v === 'string' && v.startsWith('0x') && v.length === 42);
+                recipientAddr = vals.filter(v => typeof v === 'string' && v.startsWith('0x') && v.length === 42)[1];
+                text = vals.find(v => typeof v === 'string' && !v.startsWith('0x'));
+                const tsVal = vals.find(v => typeof v === 'object' && v.toNumber);
+                timestamp = tsVal ? tsVal.toNumber() : 0;
+            }
+
+            if (!senderAddr || !recipientAddr) continue;
+
+            const isMine = senderAddr.toLowerCase() === userAddress.toLowerCase();
+            const peer = isMine ? recipientAddr : senderAddr;
+            let decrypted = await decrypt(text, peer);
+            if (!decrypted) decrypted = text;
 
             messages.push({
-                sender: m.sender,
-                recipient: m.recipient,
-                text: text,
-                timestamp: m.timestamp.toNumber(),
+                sender: senderAddr,
+                recipient: recipientAddr,
+                text: decrypted,
+                timestamp: timestamp,
                 isMine: isMine
             });
         }
 
+        const prevCount = (store.messages[addr.toLowerCase()] || []).length;
         store.messages[addr.toLowerCase()] = messages;
-        renderMessages(messages);
+
+        if (!silent || messages.length !== prevCount) {
+            renderMessages(messages);
+        }
     } catch (e) {
         console.error('Load messages error:', e);
-        container.innerHTML = '<div class="empty-state"><p>Ошибка загрузки сообщений</p></div>';
+        if (!silent) container.innerHTML = '<div class="empty-state"><p>Ошибка загрузки сообщений</p></div>';
     }
+}
+
+async function fetchConversation(userA, userB, startIdx, count) {
+    const iface = new ethers.utils.Interface(MESSAGE_ABI);
+    const callData = iface.encodeFunctionData('getConversation', [userA, userB, startIdx, count]);
+    const rawHex = await provider.call({ to: MESSAGE_CONTRACT_ADDRESS, data: callData });
+
+    for (let i = 0; i < MSG_ABI_VARIANTS.length; i++) {
+        try {
+            const altIface = new ethers.utils.Interface(MSG_ABI_VARIANTS[i]);
+            const decoded = altIface.decodeFunctionResult('getConversation', rawHex);
+            const arr = Array.isArray(decoded[0]) ? decoded[0] : (Array.isArray(decoded) ? decoded : []);
+            if (arr.length > 0) {
+                console.log('Decoded with ABI variant #' + i);
+                return arr;
+            }
+        } catch(e) {}
+    }
+
+    console.warn('All ABI variants failed, attempting manual decode');
+    try {
+        const data = ethers.utils.arrayify(rawHex);
+        const abiCoder = ethers.utils.defaultAbiCoder;
+        const decoded = abiCoder.decode(
+            ['(address,address,string,uint256,bytes)[]', 'uint256'],
+            data
+        );
+        return decoded[0] || [];
+    } catch(e) {}
+    try {
+        const data = ethers.utils.arrayify(rawHex);
+        const decoded = ethers.utils.defaultAbiCoder.decode(
+            ['(address,address,string,uint256)[]', 'uint256'],
+            data
+        );
+        return decoded[0] || [];
+    } catch(e) {}
+    try {
+        const decoded = ethers.utils.defaultAbiCoder.decode(
+            ['(address,address,string,uint256)[]'],
+            ethers.utils.arrayify(rawHex)
+        );
+        return decoded[0] || [];
+    } catch(e) {}
+
+    console.error('All decode attempts failed for getConversation');
+    return [];
 }
 
 function renderMessages(messages) {
@@ -473,7 +570,7 @@ async function sendMessage() {
     }
 }
 
-async function discoverChats() {
+async function discoverChats(silent) {
     if (!messageContract || !userAddress) return;
     try {
         const currentBlock = await provider.getBlockNumber();
@@ -489,13 +586,61 @@ async function discoverChats() {
         recvEvents.forEach(e => peers.add(e.args.sender.toLowerCase()));
         peers.delete(userAddress.toLowerCase());
 
+        let newChats = 0;
         for (const addr of peers) {
-            contactsStore.add({ address: addr, name: shortAddr(addr) });
+            const existing = contactsStore.find(addr);
+            if (!existing) {
+                contactsStore.add({ address: addr, name: shortAddr(addr) });
+                newChats++;
+                resolveAndUpdateContact(addr).then(updated => {
+                    if (updated) renderChatList();
+                });
+            }
         }
+
+        if (newChats > 0 && !silent) {
+            showToast('Новых чатов: ' + newChats, 'info');
+        }
+
         renderChatList();
     } catch (e) {
         console.error('Discover chats error:', e);
     }
+}
+
+function startPolling() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(async () => {
+        if (!isAuthenticated || !messageContract || isPolling) return;
+        isPolling = true;
+        try {
+            await discoverChats(true);
+            if (store.currentChat) {
+                await loadMessages(store.currentChat, true);
+            }
+        } catch(e) {
+            console.error('Poll error:', e);
+        }
+        isPolling = false;
+    }, POLL_INTERVAL);
+    console.log('Auto-refresh started: every ' + (POLL_INTERVAL/1000) + 's');
+}
+
+function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+async function deleteChat(addr) {
+    const name = contactsStore.getName(addr);
+    if (!confirm('Удалить чат с ' + name + '? История будет очищена локально.')) return;
+    contactsStore.remove(addr);
+    delete store.messages[addr.toLowerCase()];
+    if (store.currentChat === addr.toLowerCase()) {
+        store.currentChat = null;
+        renderWelcome();
+    }
+    renderChatList();
+    showToast('Чат удалён', 'info');
 }
 
 // ====================== WALLET ======================
@@ -614,6 +759,12 @@ function onAuthenticated() {
     renderChatList();
     renderWelcome();
     discoverChats();
+    startPolling();
+    contactsStore.list.forEach(c => {
+        resolveAndUpdateContact(c.address).then(updated => {
+            if (updated) renderChatList();
+        });
+    });
 }
 
 // ====================== ADMIN PANEL ======================
@@ -869,7 +1020,13 @@ function addContact(addr) {
     if (!addr || !ethers.utils.isAddress(addr)) { showToast('Введите корректный Ethereum адрес', 'error'); return; }
     if (addr.toLowerCase() === userAddress?.toLowerCase()) { showToast('Нельзя добавить себя', 'error'); return; }
     const added = contactsStore.add({ address: addr, name: shortAddr(addr) });
-    if (added) { showToast('Контакт добавлен', 'success'); renderChatList(); }
+    if (added) {
+        showToast('Контакт добавлен', 'success');
+        renderChatList();
+        resolveAndUpdateContact(addr).then(updated => {
+            if (updated) renderChatList();
+        });
+    }
     else showToast('Контакт уже существует', 'info');
 }
 
@@ -969,6 +1126,7 @@ function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 function closeModalOnBg(e, id) { if (e.target.id === id) closeModal(id); }
 
 function logout() {
+    stopPolling();
     masterKey = null; isAuthenticated = false; isAdmin = false;
     userAddress = null; currentUsername = '';
     store.currentChat = null; store.messages = {};
@@ -1009,9 +1167,12 @@ window.adminPreviewBroadcast = adminPreviewBroadcast;
 window.adminSendBroadcast = adminSendBroadcast;
 window.toggleAddContact = toggleAddContact;
 window.setFilter = setFilter;
+window.deleteChat = deleteChat;
+window.startPolling = startPolling;
+window.stopPolling = stopPolling;
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Web3 Messenger v10.1 loaded');
+    console.log('Web3 Messenger v10.2 loaded');
     renderWelcome();
     if (window.ethereum) {
         window.ethereum.on('accountsChanged', () => location.reload());
