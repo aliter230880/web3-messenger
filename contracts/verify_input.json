@@ -1,0 +1,19 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "contracts/Web3Messenger.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\n\ncontract Web3Messenger {\n    struct Message {\n        address sender;\n        address recipient;\n        string text;\n        uint256 timestamp;\n    }\n\n    mapping(bytes32 => Message[]) private conversations;\n\n    event MessageSent(\n        address indexed sender,\n        address indexed recipient,\n        uint256 timestamp\n    );\n\n    event ChatDiscovered(\n        address indexed user,\n        address indexed peer\n    );\n\n    function _chatKey(address a, address b) private pure returns (bytes32) {\n        return a < b ? keccak256(abi.encodePacked(a, b)) : keccak256(abi.encodePacked(b, a));\n    }\n\n    function sendMessage(address recipient, string calldata text) external {\n        require(recipient != address(0), \"Invalid recipient\");\n        require(recipient != msg.sender, \"Cannot message yourself\");\n        require(bytes(text).length > 0, \"Empty message\");\n\n        bytes32 key = _chatKey(msg.sender, recipient);\n        conversations[key].push(Message({\n            sender: msg.sender,\n            recipient: recipient,\n            text: text,\n            timestamp: block.timestamp\n        }));\n\n        emit MessageSent(msg.sender, recipient, block.timestamp);\n        emit ChatDiscovered(msg.sender, recipient);\n        emit ChatDiscovered(recipient, msg.sender);\n    }\n\n    function messageCount(address a, address b) external view returns (uint256) {\n        return conversations[_chatKey(a, b)].length;\n    }\n\n    function getConversation(\n        address userA,\n        address userB,\n        uint256 startIndex,\n        uint256 count\n    ) external view returns (Message[] memory, uint256 total) {\n        bytes32 key = _chatKey(userA, userB);\n        Message[] storage msgs = conversations[key];\n        total = msgs.length;\n\n        if (startIndex >= total) {\n            return (new Message[](0), total);\n        }\n\n        uint256 end = startIndex + count;\n        if (end > total) end = total;\n        uint256 len = end - startIndex;\n\n        Message[] memory result = new Message[](len);\n        for (uint256 i = 0; i < len; i++) {\n            result[i] = msgs[startIndex + i];\n        }\n\n        return (result, total);\n    }\n\n    function getLatestMessages(\n        address userA,\n        address userB,\n        uint256 count\n    ) external view returns (Message[] memory, uint256 total) {\n        bytes32 key = _chatKey(userA, userB);\n        Message[] storage msgs = conversations[key];\n        total = msgs.length;\n\n        if (total == 0) {\n            return (new Message[](0), 0);\n        }\n\n        uint256 start = total > count ? total - count : 0;\n        uint256 len = total - start;\n\n        Message[] memory result = new Message[](len);\n        for (uint256 i = 0; i < len; i++) {\n            result[i] = msgs[start + i];\n        }\n\n        return (result, total);\n    }\n}\n"
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": true,
+      "runs": 200
+    },
+    "outputSelection": {
+      "*": {
+        "*": ["abi", "evm.bytecode", "evm.deployedBytecode", "metadata"]
+      }
+    }
+  }
+}
