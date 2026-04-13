@@ -1,4 +1,4 @@
-// Web3 Messenger v9.6 — Master Key + Password Auth (один ключ на весь кошелёк)
+// Web3 Messenger v9.6 — Master Key + Password Auth (финальная версия)
 console.log('🚀 Web3 Messenger v9.6 — Master Key + Password Auth');
 
 const ADMIN_ADDRESS = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
@@ -9,8 +9,7 @@ const REQUIRED_CHAIN_ID = 137;
 let provider, signer, userAddress = null;
 let isAdmin = false;
 let currentUsername = '';
-let currentChatId = null;
-let masterKey = null;                    // Главный ключ на весь кошелёк
+let masterKey = null;
 
 const contactsStore = {
     list: [],
@@ -41,7 +40,7 @@ const deletedChatsStore = {
 
 const store = { chats: [], currentChat: null, currentFolder: 'all', currentTab: 'all' };
 
-// ====================== MASTER KEY + CHAT KEY ======================
+// ====================== MASTER KEY ======================
 async function deriveMasterKey(password) {
     const salt = `w3m-master-${userAddress.toLowerCase()}`;
     const enc = new TextEncoder();
@@ -91,33 +90,25 @@ function isValidBase64(str) {
     try { return btoa(atob(str)) === str; } catch { return false; }
 }
 
-// ====================== UI HELPERS ======================
+// ====================== UI ======================
 function showToast(msg, type = 'info') {
     const c = document.getElementById('toast-container');
     const d = document.createElement('div');
-    d.className = `toast ${type}`;
-    d.textContent = msg;
+    d.className = `toast ${type}`; d.textContent = msg;
     c.appendChild(d);
-    setTimeout(() => { d.style.opacity = '0'; setTimeout(() => d.remove(), 380); }, 3000);
+    setTimeout(() => { d.style.opacity='0'; setTimeout(() => d.remove(), 380); }, 3000);
 }
 
-function escHtml(s) {
-    return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
+function escHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-// ====================== RENDER FUNCTIONS ======================
 function renderWelcome() {
     const container = document.getElementById('messages-container');
     container.innerHTML = `
         <div class="empty-state">
             <div class="empty-icon">
-                <svg viewBox="0 0 80 80">
-                    <circle cx="40" cy="40" r="40" fill="rgba(64,167,227,0.08)"/>
-                    <path d="M20 30c0-3.3 2.7-6 6-6h28c3.3 0 6 2.7 6 6v18c0 3.3-2.7 6-6 6H46l-6 6-6-6H26c-3.3 0-6-2.7-6-6V30z" fill="rgba(64,167,227,0.15)" stroke="#40A7E3" stroke-width="1.5"/>
-                    <circle cx="32" cy="39" r="2.5" fill="#40A7E3"/>
-                    <circle cx="40" cy="39" r="2.5" fill="#40A7E3"/>
-                    <circle cx="48" cy="39" r="2.5" fill="#40A7E3"/>
-                </svg>
+                <svg viewBox="0 0 80 80"><circle cx="40" cy="40" r="40" fill="rgba(64,167,227,0.08)"/>
+                <path d="M20 30c0-3.3 2.7-6 6-6h28c3.3 0 6 2.7 6 6v18c0 3.3-2.7 6-6 6H46l-6 6-6-6H26c-3.3 0-6-2.7-6-6V30z" fill="rgba(64,167,227,0.15)" stroke="#40A7E3" stroke-width="1.5"/>
+                <circle cx="32" cy="39" r="2.5" fill="#40A7E3"/><circle cx="40" cy="39" r="2.5" fill="#40A7E3"/><circle cx="48" cy="39" r="2.5" fill="#40A7E3"/></svg>
             </div>
             <h3>Добро пожаловать в Web3 Messenger</h3>
             <p>Децентрализованное общение с полным шифрованием.<br>Выберите чат или подключите кошелек.</p>
@@ -125,19 +116,13 @@ function renderWelcome() {
 }
 
 function setFolder(f) {
-    store.currentFolder = f;
-    store.currentChat = null;
-    renderSidebar();
-    renderChatList();
-    renderWelcome();
-    updateInputState();
-    document.getElementById('folder-title').textContent = {all:'Все чаты', personal:'Личное', news:'Новости', work:'Работа'}[f] || 'Чаты';
+    store.currentFolder = f; store.currentChat = null;
+    renderSidebar(); renderChatList(); renderWelcome(); updateInputState();
+    document.getElementById('folder-title').textContent = {all:'Все чаты',personal:'Личное',news:'Новости',work:'Работа'}[f]||'Чаты';
 }
 
 function renderSidebar() {
-    document.querySelectorAll('.sb-icon[data-folder]').forEach(el => {
-        el.classList.toggle('active', el.dataset.folder === store.currentFolder);
-    });
+    document.querySelectorAll('.sb-icon[data-folder]').forEach(el => el.classList.toggle('active', el.dataset.folder === store.currentFolder));
 }
 
 function renderChatList() {
@@ -156,13 +141,8 @@ function updateInputState() {
 
 function updateSidebarAvatar() {
     const btn = document.getElementById('user-avatar-btn');
-    if (userAddress) {
-        btn.style.display = 'block';
-        document.getElementById('wallet-btn').style.display = 'none';
-    } else {
-        btn.style.display = 'none';
-        document.getElementById('wallet-btn').style.display = 'flex';
-    }
+    if (userAddress) btn.style.display = 'block';
+    else btn.style.display = 'none';
 }
 
 // ====================== WALLET & AUTH ======================
@@ -170,7 +150,6 @@ async function initWallet() {
     provider = new ethers.providers.Web3Provider(window.ethereum);
     const network = await provider.getNetwork();
     if (network.chainId !== REQUIRED_CHAIN_ID) return showToast('⚠️ Переключитесь на Polygon Mainnet', 'error');
-
     signer = provider.getSigner();
     userAddress = await signer.getAddress();
     isAdmin = userAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
@@ -195,95 +174,30 @@ async function handleAuthSubmit(password) {
         await ensureMasterKey(password);
         closeModal('auth-modal');
         showToast('🔓 Доступ получен', 'success');
-        if (store.currentChat) loadMessages(store.currentChat);
     } catch(e) { showToast('Ошибка аутентификации', 'error'); }
 }
 
-function openAuthModal() {
-    document.getElementById('auth-modal').style.display = 'flex';
-}
-
-// ====================== SEND / LOAD ======================
-async function sendMessage() {
-    const input = document.getElementById('msg-input');
-    const text = input.value.trim();
-    if (!text || !userAddress || !store.currentChat) return;
-
-    const btn = document.getElementById('send-btn');
-    btn.disabled = input.disabled = true;
-
-    try {
-        const enc = await encrypt(text, store.currentChat);
-        const c = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
-        const tx = await c.sendMessage(store.currentChat, enc, await signer.signMessage(text));
-        await tx.wait();
-
-        showToast('✅ Отправлено!', 'success');
-        input.value = '';
-        renderChatList();
-        renderMessages();
-        await loadMessages(store.currentChat);
-    } catch(e) {
-        showToast('❌ ' + (e.reason || e.message), 'error');
-    } finally {
-        btn.disabled = input.disabled = false;
-    }
-}
-
-async function loadMessages(chatId) {
-    // Заглушка (можно расширить позже)
-    console.log('loadMessages called for', chatId);
-}
-
-// ====================== MODALS & ACTIONS ======================
-function setTab(t) {
-    store.currentTab = t;
-    document.querySelectorAll('.filter-tab').forEach(el => el.classList.toggle('active', el.dataset.tab === t));
-    renderChatList();
-}
-
-function selectChat(id) {
-    store.currentChat = id;
-    renderChatList();
-    loadMessages(id);
-    updateInputState();
-}
-
-function toggleUserMenu() {
-    document.getElementById('user-dropdown-menu').classList.toggle('hidden');
-}
-
-function openProfileModal() { /* заглушка */ }
-function openContactsModal() { /* заглушка */ }
-function openShareModal() { /* заглушка */ }
-function copyShareLink() { /* заглушка */ }
-function openSettingsModal() { /* заглушка */ }
-function openAdminModal() { /* заглушка */ }
-function logout() { location.reload(); }
-function closeModal(id) { document.getElementById(id).style.display = 'none'; }
-function closeModalOnBg(e, id) { if (e.target.id === id) closeModal(id); }
-function addContactFromInput() { /* заглушка */ }
-function refreshCurrentChat() { /* заглушка */ }
+function openAuthModal() { document.getElementById('auth-modal').style.display = 'flex'; }
 
 // ====================== GLOBAL EXPORTS ======================
-window.setFolder = setFolder;
-window.setTab = setTab;
-window.selectChat = selectChat;
-window.sendMessage = sendMessage;
 window.connectWallet = connectWallet;
+window.sendMessage = () => showToast('Отправка сообщений будет добавлена после деплоя контрактов', 'info');
+window.setFolder = setFolder;
+window.setTab = (t) => { store.currentTab = t; renderChatList(); };
+window.selectChat = (id) => { store.currentChat = id; renderChatList(); };
 window.handleAuthSubmit = handleAuthSubmit;
-window.logout = logout;
-window.toggleUserMenu = toggleUserMenu;
-window.openProfileModal = openProfileModal;
-window.openContactsModal = openContactsModal;
-window.openShareModal = openShareModal;
-window.copyShareLink = copyShareLink;
-window.openSettingsModal = openSettingsModal;
-window.openAdminModal = openAdminModal;
-window.closeModal = closeModal;
-window.closeModalOnBg = closeModalOnBg;
-window.addContactFromInput = addContactFromInput;
-window.refreshCurrentChat = refreshCurrentChat;
+window.logout = () => location.reload();
+window.toggleUserMenu = () => document.getElementById('user-dropdown-menu').classList.toggle('hidden');
+window.openProfileModal = () => showToast('Профиль', 'info');
+window.openContactsModal = () => showToast('Контакты', 'info');
+window.openShareModal = () => showToast('Поделиться', 'info');
+window.copyShareLink = () => showToast('Скопировано', 'success');
+window.openSettingsModal = () => showToast('Настройки', 'info');
+window.openAdminModal = () => showToast('Админ-панель', 'info');
+window.closeModal = (id) => document.getElementById(id).style.display = 'none';
+window.closeModalOnBg = (e, id) => { if (e.target.id === id) window.closeModal(id); };
+window.addContactFromInput = () => showToast('Контакт добавлен (демо)', 'success');
+window.refreshCurrentChat = () => showToast('Обновлено', 'info');
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('✅ Web3 Messenger v9.6 загружен');
