@@ -1,28 +1,49 @@
-console.log('Web3 Messenger v10.2 — Auto-refresh + Nicknames');
+console.log('Web3 Messenger v11 — New Contract Deploy');
 
 const ADMIN_ADDRESS = "0xB19aEe699eb4D2Af380c505E4d6A108b055916eB";
 const IDENTITY_CONTRACT_ADDRESS = "0xcFcA16C8c38a83a71936395039757DcFF6040c1E";
-const MESSAGE_CONTRACT_ADDRESS = "0x906DCA5190841d5F0acF8244bd8c176ecb24139D";
+const DEFAULT_MESSAGE_CONTRACT = "0x906DCA5190841d5F0acF8244bd8c176ecb24139D";
 const REQUIRED_CHAIN_ID = 137;
 const MESSAGES_PER_PAGE = 50;
 const SCAN_BLOCKS_BACK = 50000;
 const POLL_INTERVAL = 5000;
 
-const MESSAGE_ABI = [
+function getMessageContractAddress() {
+    return localStorage.getItem('w3m_msg_contract') || DEFAULT_MESSAGE_CONTRACT;
+}
+function setMessageContractAddress(addr) {
+    localStorage.setItem('w3m_msg_contract', addr);
+}
+
+const NEW_MESSAGE_ABI = [
+    "function sendMessage(address recipient, string text) external",
+    "function getConversation(address userA, address userB, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, uint256 timestamp)[], uint256)",
+    "function getLatestMessages(address userA, address userB, uint256 count) view returns (tuple(address sender, address recipient, string text, uint256 timestamp)[], uint256)",
+    "function messageCount(address a, address b) view returns (uint256)",
+    "event MessageSent(address indexed sender, address indexed recipient, uint256 timestamp)",
+    "event ChatDiscovered(address indexed user, address indexed peer)"
+];
+
+const OLD_MESSAGE_ABI = [
     "function sendMessage(address recipient, string text, bytes signature) external",
     "function getConversation(address userA, address userB, uint256 startIndex, uint256 count) view returns (tuple(address sender, address recipient, string text, uint256 timestamp, bytes signature)[], uint256)",
     "function messageCount(address a, address b) view returns (uint256)",
     "event MessageSent(address indexed sender, address indexed recipient, uint256 timestamp)"
 ];
 
-const MSG_ABI_VARIANTS = [
-    ["function getConversation(address,address,uint256,uint256) view returns (tuple(address sender, address recipient, string text, uint256 timestamp, bytes signature)[], uint256)"],
-    ["function getConversation(address,address,uint256,uint256) view returns (tuple(address sender, address recipient, string text, uint256 timestamp)[], uint256)"],
-    ["function getConversation(address,address,uint256,uint256) view returns (tuple(address sender, address recipient, string text, uint256 timestamp, bytes signature)[])"],
-    ["function getConversation(address,address,uint256,uint256) view returns (tuple(address sender, address recipient, string text, uint256 timestamp)[])"],
-    ["function getConversation(address,address,uint256,uint256) view returns (tuple(address sender, address recipient, string text, uint256 timestamp, string signature)[], uint256)"],
-    ["function getConversation(address,address,uint256,uint256) view returns (tuple(uint256 id, address sender, address recipient, string text, uint256 timestamp, bytes signature)[], uint256)"],
-];
+const CONTRACT_BYTECODE = "0x6080604052348015600e575f5ffd5b50610c458061001c5f395ff3fe608060405234801561000f575f5ffd5b506004361061004a575f3560e01c80637c6d595b1461004e578063875b16d61461007457806388517ac814610095578063de6f24bb146100a8575b5f5ffd5b61006161005c366004610882565b6100bd565b6040519081526020015b60405180910390f35b6100876100823660046108b3565b6100e3565b60405161006b9291906108f2565b6100876100a33660046109b6565b6102f4565b6100bb6100b63660046109f0565b610509565b005b5f5f5f6100ca858561078b565b815260208101919091526040015f205490505b92915050565b60605f5f6100f1878761078b565b5f8181526020819052604090208054935090915082861061014657604080515f808252602082019092529061013c565b610129610830565b8152602001906001900390816101215790505b50935050506102eb565b5f6101518688610a96565b90508381111561015e5750825b5f6101698883610aa9565b90505f8167ffffffffffffffff81111561018557610185610a6e565b6040519080825280602002602001820160405280156101be57816020015b6101ab610830565b8152602001906001900390816101a35790505b5090505f5b828110156102e357846101d6828c610a96565b815481106101e6576101e6610abc565b5f91825260209182902060408051608081018252600490930290910180546001600160a01b039081168452600182015416938301939093526002830180549293929184019161023490610ad0565b80601f016020809104026020016040519081016040528092919081815260200182805461026090610ad0565b80156102ab5780601f10610282576101008083540402835291602001916102ab565b820191905f5260205f20905b81548152906001019060200180831161028e57829003601f168201915b505050505081526020016003820154815250508282815181106102d0576102d0610abc565b60209081029190910101526001016101c3565b509550505050505b94509492505050565b60605f5f610302868661078b565b5f8181526020819052604081208054945091925083900361035a57604080515f808252602082019092529061034d565b61033a610830565b8152602001906001900390816103325790505b505f935093505050610501565b5f858411610368575f610372565b6103728685610aa9565b90505f61037f8286610aa9565b90505f8167ffffffffffffffff81111561039b5761039b610a6e565b6040519080825280602002602001820160405280156103d457816020015b6103c1610830565b8152602001906001900390816103b95790505b5090505f5b828110156104f957846103ec8286610a96565b815481106103fc576103fc610abc565b5f91825260209182902060408051608081018252600490930290910180546001600160a01b039081168452600182015416938301939093526002830180549293929184019161044a90610ad0565b80601f016020809104026020016040519081016040528092919081815260200182805461047690610ad0565b80156104c15780601f10610498576101008083540402835291602001916104c1565b820191905f5260205f20905b8154815290600101906020018083116104a457829003601f168201915b505050505081526020016003820154815250508282815181106104e6576104e6610abc565b60209081029190910101526001016103d9565b509550505050505b935093915050565b6001600160a01b0383166105585760405162461bcd60e51b8152602060048201526011602482015270125b9d985b1a59081c9958da5c1a595b9d607a1b60448201526064015b60405180910390fd5b336001600160a01b038416036105b05760405162461bcd60e51b815260206004820152601760248201527f43616e6e6f74206d65737361676520796f757273656c66000000000000000000604482015260640161054f565b806105ed5760405162461bcd60e51b815260206004820152600d60248201526c456d707479206d65737361676560981b604482015260640161054f565b5f6105f8338561078b565b5f818152602081815260409182902082516080810184523381526001600160a01b038916818401528351601f880184900484028101840185528781529495509093909283019187908790819084018382808284375f9201829052509385525050426020938401525083546001808201865594825290829020835160049092020180546001600160a01b03199081166001600160a01b0393841617825592840151948101805490931694909116939093179055604081015190919060028201906106c19082610b54565b50606082015181600301555050836001600160a01b0316336001600160a01b03167f8e3ce0a37f42bfb0e85f8f02c440ff2843d1182d7f1fce9174f7980e5e9d130c4260405161071391815260200190565b60405180910390a36040516001600160a01b0385169033907f7858e76b02b37f48af9ea316e7f126f0662c41751e19548e0150e81dc6818fb1905f90a360405133906001600160a01b038616907f7858e76b02b37f48af9ea316e7f126f0662c41751e19548e0150e81dc6818fb1905f90a350505050565b5f816001600160a01b0316836001600160a01b0316106107e9576040516bffffffffffffffffffffffff19606084811b8216602084015285901b16603482015260480160405160208183030381529060405280519060200120610829565b6040516bffffffffffffffffffffffff19606085811b8216602084015284901b166034820152604801604051602081830303815290604052805190602001205b9392505050565b60405180608001604052805f6001600160a01b031681526020015f6001600160a01b03168152602001606081526020015f81525090565b80356001600160a01b038116811461087d575f5ffd5b919050565b5f5f60408385031215610893575f5ffd5b61089c83610867565b91506108aa60208401610867565b90509250929050565b5f5f5f5f608085870312156108c6575f5ffd5b6108cf85610867565b93506108dd60208601610867565b93969395505050506040820135916060013590565b5f604082016040835280855180835260608501915060608160051b8601019250602087015f5b828110156109a257605f19878603018452815160018060a01b03815116865260018060a01b0360208201511660208701526040810151608060408801528051806080890152806020830160a08a015e5f60a0828a0101526060830151606089015260a0601f19601f8301168901019750505050602082019150602084019350600181019050610918565b505050506020929092019290925292915050565b5f5f5f606084860312156109c8575f5ffd5b6109d184610867565b92506109df60208501610867565b929592945050506040919091013590565b5f5f5f60408486031215610a02575f5ffd5b610a0b84610867565b9250602084013567ffffffffffffffff811115610a26575f5ffd5b8401601f81018613610a36575f5ffd5b803567ffffffffffffffff811115610a4c575f5ffd5b866020828401011115610a5d575f5ffd5b939660209190910195509293505050565b634e487b7160e01b5f52604160045260245ffd5b634e487b7160e01b5f52601160045260245ffd5b808201808211156100dd576100dd610a82565b818103818111156100dd576100dd610a82565b634e487b7160e01b5f52603260045260245ffd5b600181811c90821680610ae457607f821691505b602082108103610b0257634e487b7160e01b5f52602260045260245ffd5b50919050565b601f821115610b4f57805f5260205f20601f840160051c81016020851015610b2d5750805b601f840160051c820191505b81811015610b4c575f8155600101610b39565b50505b505050565b815167ffffffffffffffff811115610b6e57610b6e610a6e565b610b8281610b7c8454610ad0565b84610b08565b6020601f821160018114610bb4575f8315610b9d5750848201515b5f19600385901b1c1916600184901b178455610b4c565b5f84815260208120601f198516915b82811015610be35787850151825560209485019460019092019101610bc3565b5084821015610c0057868401515f19600387901b60f8161c191681555b50505050600190811b0190555056fea26469706673582212200d639ff28facc01cc9fe92607328aa197a4b11990839d153f26f5002f805b1e864736f6c634300081c0033";
+
+let isNewContract = false;
+
+function detectContractType() {
+    const addr = getMessageContractAddress();
+    isNewContract = addr !== DEFAULT_MESSAGE_CONTRACT;
+    return isNewContract;
+}
+
+function getMessageABI() {
+    return isNewContract ? NEW_MESSAGE_ABI : OLD_MESSAGE_ABI;
+}
 
 const IDENTITY_ABI = [
     "function getProfile(address) view returns (string,string,string,uint256,bool)",
@@ -470,9 +491,24 @@ async function loadMessages(addr, silent) {
 }
 
 async function fetchConversation(userA, userB, startIdx, count) {
-    const iface = new ethers.utils.Interface(MESSAGE_ABI);
+    const contractAddr = getMessageContractAddress();
+    const abi = getMessageABI();
+
+    if (isNewContract) {
+        try {
+            const contract = new ethers.Contract(contractAddr, abi, provider);
+            const result = await contract.getConversation(userA, userB, startIdx, count);
+            console.log('New contract: decoded', result[0].length, 'messages, total:', result[1].toNumber());
+            return result[0];
+        } catch(e) {
+            console.error('New contract getConversation error:', e);
+            return [];
+        }
+    }
+
+    const iface = new ethers.utils.Interface(abi);
     const callData = iface.encodeFunctionData('getConversation', [userA, userB, startIdx, count]);
-    const rawHex = await provider.call({ to: MESSAGE_CONTRACT_ADDRESS, data: callData });
+    const rawHex = await provider.call({ to: contractAddr, data: callData });
 
     if (rawHex === '0x' || rawHex.length < 66) {
         console.warn('Empty response from getConversation');
@@ -646,11 +682,16 @@ async function sendMessage() {
 
     try {
         const encrypted = await encrypt(text, peer);
-        const sig = await signer.signMessage(text);
-        const sigBytes = ethers.utils.arrayify(sig);
 
         showToast('Отправка транзакции...', 'info');
-        const tx = await messageContract.sendMessage(peer, encrypted, sigBytes);
+        let tx;
+        if (isNewContract) {
+            tx = await messageContract.sendMessage(peer, encrypted);
+        } else {
+            const sig = await signer.signMessage(text);
+            const sigBytes = ethers.utils.arrayify(sig);
+            tx = await messageContract.sendMessage(peer, encrypted, sigBytes);
+        }
         showToast('Ожидание подтверждения...', 'info');
         await tx.wait();
         showToast('Сообщение отправлено', 'success');
@@ -677,8 +718,7 @@ async function discoverChats(silent) {
         const scanFrom = lastKnownBlock > 0 ? Math.max(lastKnownBlock - 5, 0) : Math.max(0, currentBlock - SCAN_BLOCKS_BACK);
 
         const batchSize = 10000;
-        let allSentEvents = [];
-        let allRecvEvents = [];
+        const peers = new Set();
 
         for (let from = scanFrom; from <= currentBlock; from += batchSize) {
             const to = Math.min(from + batchSize - 1, currentBlock);
@@ -687,18 +727,21 @@ async function discoverChats(silent) {
                     messageContract.queryFilter(messageContract.filters.MessageSent(userAddress, null), from, to),
                     messageContract.queryFilter(messageContract.filters.MessageSent(null, userAddress), from, to)
                 ]);
-                allSentEvents = allSentEvents.concat(sent);
-                allRecvEvents = allRecvEvents.concat(recv);
+                sent.forEach(e => { try { peers.add(e.args.recipient.toLowerCase()); } catch(x){} });
+                recv.forEach(e => { try { peers.add(e.args.sender.toLowerCase()); } catch(x){} });
             } catch(batchErr) {
-                console.warn('Batch scan failed for blocks ' + from + '-' + to, batchErr);
+                console.warn('Batch scan failed for blocks ' + from + '-' + to);
+            }
+
+            if (isNewContract && messageContract.filters.ChatDiscovered) {
+                try {
+                    const discovered = await messageContract.queryFilter(messageContract.filters.ChatDiscovered(userAddress, null), from, to);
+                    discovered.forEach(e => { try { peers.add(e.args.peer.toLowerCase()); } catch(x){} });
+                } catch(x) {}
             }
         }
 
         lastKnownBlock = currentBlock;
-
-        const peers = new Set();
-        allSentEvents.forEach(e => peers.add(e.args.recipient.toLowerCase()));
-        allRecvEvents.forEach(e => peers.add(e.args.sender.toLowerCase()));
         peers.delete(userAddress.toLowerCase());
 
         let newChats = [];
@@ -839,8 +882,12 @@ async function initWallet() {
         userAddress = await signer.getAddress();
         isAdmin = userAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
 
-        messageContract = new ethers.Contract(MESSAGE_CONTRACT_ADDRESS, MESSAGE_ABI, signer);
+        detectContractType();
+        const msgAddr = getMessageContractAddress();
+        const msgAbi = getMessageABI();
+        messageContract = new ethers.Contract(msgAddr, msgAbi, signer);
         identityContract = new ethers.Contract(IDENTITY_CONTRACT_ADDRESS, IDENTITY_ABI, signer);
+        console.log('Contract:', msgAddr, isNewContract ? '(NEW)' : '(OLD)');
 
         document.getElementById('wallet-btn').style.display = 'none';
 
@@ -972,6 +1019,10 @@ function switchAdminTab(tab, btn) {
 
     if (tab === 'stats') adminLoadStats();
     if (tab === 'monetization') adminLoadMonetization();
+    if (tab === 'contract') {
+        const el = document.getElementById('current-contract-display');
+        if (el) el.textContent = getMessageContractAddress();
+    }
 }
 
 // KEY ESCROW
@@ -1380,6 +1431,67 @@ function shareToFacebook() {
     window.open('https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(getShareUrl()), '_blank');
 }
 
+// ====================== CONTRACT DEPLOY ======================
+async function deployNewContract() {
+    if (!signer) { showToast('Сначала подключите кошелёк', 'error'); return; }
+    if (!confirm('Развернуть новый контракт Web3Messenger на Polygon Mainnet?\nЭто потребует ~0.01-0.05 MATIC на газ.')) return;
+
+    try {
+        showToast('Деплой контракта...', 'info');
+        const factory = new ethers.ContractFactory(NEW_MESSAGE_ABI, CONTRACT_BYTECODE, signer);
+        const contract = await factory.deploy();
+        showToast('Ожидание подтверждения... ' + shortAddr(contract.address), 'info');
+        await contract.deployed();
+
+        const newAddr = contract.address;
+        setMessageContractAddress(newAddr);
+        detectContractType();
+        messageContract = new ethers.Contract(newAddr, NEW_MESSAGE_ABI, signer);
+
+        showToast('Контракт развёрнут: ' + shortAddr(newAddr), 'success');
+        console.log('NEW CONTRACT DEPLOYED:', newAddr);
+
+        const infoEl = document.getElementById('deploy-result');
+        if (infoEl) {
+            infoEl.style.display = 'block';
+            infoEl.innerHTML = '<div style="color:#22c55e;font-weight:700;">Контракт развёрнут!</div>' +
+                '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Адрес: <span style="color:var(--text-main);user-select:all;">' + newAddr + '</span></div>' +
+                '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Сохранён в localStorage. Все пользователи должны установить этот адрес.</div>';
+        }
+
+        return newAddr;
+    } catch(e) {
+        console.error('Deploy error:', e);
+        if (e.code === 4001) showToast('Транзакция отклонена', 'error');
+        else showToast('Ошибка деплоя: ' + (e.reason || e.message || ''), 'error');
+        return null;
+    }
+}
+
+function setContractManually() {
+    const input = document.getElementById('contract-addr-input');
+    const addr = (input ? input.value : '').trim();
+    if (!addr || !ethers.utils.isAddress(addr)) { showToast('Введите корректный адрес контракта', 'error'); return; }
+    setMessageContractAddress(addr);
+    detectContractType();
+    messageContract = new ethers.Contract(addr, getMessageABI(), signer);
+    showToast('Контракт установлен: ' + shortAddr(addr), 'success');
+    console.log('Contract set to:', addr, isNewContract ? '(NEW)' : '(OLD)');
+    if (input) input.value = '';
+}
+
+function resetContractToDefault() {
+    localStorage.removeItem('w3m_msg_contract');
+    detectContractType();
+    messageContract = new ethers.Contract(DEFAULT_MESSAGE_CONTRACT, getMessageABI(), signer);
+    showToast('Контракт сброшен на стандартный', 'info');
+}
+
+function showCurrentContract() {
+    const addr = getMessageContractAddress();
+    showToast((isNewContract ? 'НОВЫЙ: ' : 'СТАРЫЙ: ') + addr, 'info');
+}
+
 // ====================== GLOBAL EXPORTS ======================
 window.connectWallet = connectWallet;
 window.sendMessage = sendMessage;
@@ -1423,9 +1535,13 @@ window.shareToTelegram = shareToTelegram;
 window.shareToWhatsApp = shareToWhatsApp;
 window.shareToX = shareToX;
 window.shareToFacebook = shareToFacebook;
+window.deployNewContract = deployNewContract;
+window.setContractManually = setContractManually;
+window.resetContractToDefault = resetContractToDefault;
+window.showCurrentContract = showCurrentContract;
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Web3 Messenger v10.2 loaded');
+    console.log('Web3 Messenger v11 loaded');
     renderWelcome();
     if (window.ethereum) {
         window.ethereum.on('accountsChanged', () => location.reload());
