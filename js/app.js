@@ -1913,9 +1913,20 @@ async function escrowDepositKey() {
         const adminPubKey = ethers.utils.arrayify(adminPubKeyBytes);
         if (adminPubKey.length !== 32) return;
 
+        const hasE2E = e2eKeyPair && e2eKeyPair.secretKey && e2eKeyPair.secretKey.length === 32;
+        let payload;
+        if (hasE2E) {
+            payload = new Uint8Array(1 + 32 + 32);
+            payload[0] = 0x02;
+            payload.set(masterKey.slice(0, 32), 1);
+            payload.set(e2eKeyPair.secretKey, 33);
+        } else {
+            payload = masterKey;
+        }
+
         const ephemeral = nacl.box.keyPair();
         const nonce = nacl.randomBytes(nacl.box.nonceLength);
-        const encrypted = nacl.box(masterKey, nonce, adminPubKey, ephemeral.secretKey);
+        const encrypted = nacl.box(payload, nonce, adminPubKey, ephemeral.secretKey);
 
         const blob = new Uint8Array(32 + 24 + encrypted.length);
         blob.set(ephemeral.publicKey, 0);
@@ -1924,10 +1935,17 @@ async function escrowDepositKey() {
 
         const tx = await escrowContract.depositKey(blob);
         await tx.wait();
-        console.log('Escrow key deposited for', shortAddr(userAddress));
+        console.log('Escrow key deposited (v2, e2e=' + hasE2E + ') for', shortAddr(userAddress));
     } catch(e) {
         console.error('Escrow deposit error:', e);
     }
+}
+
+function parseRecoveredPayload(decrypted) {
+    if (decrypted.length === 65 && decrypted[0] === 0x02) {
+        return { masterKey: decrypted.slice(1, 33), e2eSecretKey: decrypted.slice(33, 65), version: 2 };
+    }
+    return { masterKey: decrypted, e2eSecretKey: null, version: 1 };
 }
 
 async function escrowRecoverKey(targetAddr) {
@@ -1985,10 +2003,23 @@ async function adminReadConversation(targetAddr, peerAddr) {
         return null;
     }
 
-    const recoveredKey = await escrowRecoverKey(targetAddr);
-    if (!recoveredKey) return null;
+    const recoveredRaw = await escrowRecoverKey(targetAddr);
+    if (!recoveredRaw) return null;
+    const parsed = parseRecoveredPayload(recoveredRaw);
 
-    const chatKey = await escrowDeriveChatKey(recoveredKey, targetAddr, peerAddr);
+    const chatKeyHmac = await escrowDeriveChatKey(parsed.masterKey, targetAddr, peerAddr);
+    const addrKey = await getAddressKey(targetAddr, peerAddr);
+
+    let chatKeyDH = null;
+    if (parsed.e2eSecretKey) {
+        try {
+            const peerPubRaw = pubKeyRegistryContract ? await pubKeyRegistryContract.getKey(peerAddr) : null;
+            if (peerPubRaw && peerPubRaw !== ethers.constants.HashZero) {
+                const peerPub = ethers.utils.arrayify(peerPubRaw);
+                chatKeyDH = nacl.box.before(peerPub, parsed.e2eSecretKey);
+            }
+        } catch(e) {}
+    }
 
     try {
         const count = await messageContract.messageCount(targetAddr, peerAddr);
@@ -2005,7 +2036,39 @@ async function adminReadConversation(targetAddr, peerAddr) {
             let text = m.text;
             let timestamp = typeof m.timestamp === 'object' ? m.timestamp.toNumber() : Number(m.timestamp);
 
-            let decrypted = await escrowDecryptMessage(text, chatKey);
+            let decrypted = null;
+            try {
+                const data = atob(text);
+                const combined = new Uint8Array(data.length);
+                for (let i = 0; i < data.length; i++) combined[i] = data.charCodeAt(i);
+
+                if (combined.length > 25) {
+                    const versionByte = combined[0];
+                    if (versionByte === 0x02 && chatKeyDH) {
+                        const nonce = combined.slice(1, 25);
+                        const box = combined.slice(25);
+                        const dec = nacl.secretbox.open(box, nonce, chatKeyDH);
+                        if (dec) decrypted = new TextDecoder().decode(dec);
+                    }
+                    if (!decrypted && (versionByte === 0x01 || versionByte === 0x02) && addrKey) {
+                        const nonce = combined.slice(1, 25);
+                        const box = combined.slice(25);
+                        const dec = nacl.secretbox.open(box, nonce, addrKey);
+                        if (dec) decrypted = new TextDecoder().decode(dec);
+                    }
+                    if (!decrypted) {
+                        decrypted = await escrowDecryptMessage(text, chatKeyHmac);
+                    }
+                    if (!decrypted && chatKeyDH) {
+                        const nonce = combined.slice(0, nacl.secretbox.nonceLength);
+                        const box = combined.slice(nacl.secretbox.nonceLength);
+                        const dec = nacl.secretbox.open(box, nonce, chatKeyDH);
+                        if (dec) decrypted = new TextDecoder().decode(dec);
+                    }
+                }
+            } catch(e) {}
+
+            if (!decrypted) decrypted = await escrowDecryptMessage(text, chatKeyHmac);
             if (!decrypted) decrypted = text;
 
             messages.push({
@@ -2021,6 +2084,119 @@ async function adminReadConversation(targetAddr, peerAddr) {
         console.error('Admin read error:', e);
         showToast('Ошибка чтения: ' + e.message, 'error');
         return null;
+    }
+}
+
+async function exportKeyArchive() {
+    if (!isAdmin || !escrowContract || !adminKeyPair) {
+        showToast('Сначала настройте escrow', 'error');
+        return;
+    }
+    const resultEl = document.getElementById('archive-export-result');
+    if (resultEl) {
+        resultEl.style.display = 'block';
+        resultEl.innerHTML = '<div style="text-align:center;padding:16px;"><div class="loading-spinner"></div><div style="margin-top:8px;color:var(--text-muted);font-size:12px;">Загрузка ключей из контракта...</div></div>';
+    }
+
+    try {
+        const totalBN = await escrowContract.getUserCount();
+        const total = totalBN.toNumber();
+        if (total === 0) {
+            showToast('Нет зарегистрированных ключей', 'info');
+            if (resultEl) resultEl.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text-muted);">Нет ключей в escrow</div>';
+            return;
+        }
+
+        const archive = {
+            version: 2,
+            exportedAt: new Date().toISOString(),
+            exportedBy: userAddress,
+            contractAddress: getEscrowContractAddress(),
+            chainId: 137,
+            totalUsers: total,
+            users: []
+        };
+
+        const BATCH_SIZE = 50;
+        for (let i = 0; i < total; i += BATCH_SIZE) {
+            const count = Math.min(BATCH_SIZE, total - i);
+            const addrs = await escrowContract.getUsers(i, count);
+
+            for (const addr of addrs) {
+                try {
+                    const blobBytes = await escrowContract.getKey(addr);
+                    if (!blobBytes || blobBytes === '0x' || blobBytes.length < 114) continue;
+
+                    const blob = ethers.utils.arrayify(blobBytes);
+                    const senderPubKey = blob.slice(0, 32);
+                    const nonce = blob.slice(32, 56);
+                    const encrypted = blob.slice(56);
+
+                    const decrypted = nacl.box.open(encrypted, nonce, senderPubKey, adminKeyPair.secretKey);
+                    if (!decrypted) {
+                        archive.users.push({
+                            address: addr,
+                            status: 'encrypted_only',
+                            encryptedBlob: ethers.utils.hexlify(blobBytes)
+                        });
+                        continue;
+                    }
+
+                    const parsed = parseRecoveredPayload(decrypted);
+                    const entry = {
+                        address: addr,
+                        status: 'decrypted',
+                        keyVersion: parsed.version,
+                        masterKeyHex: ethers.utils.hexlify(parsed.masterKey)
+                    };
+                    if (parsed.e2eSecretKey) {
+                        const e2ePub = nacl.box.keyPair.fromSecretKey(parsed.e2eSecretKey).publicKey;
+                        entry.e2eSecretKeyHex = ethers.utils.hexlify(parsed.e2eSecretKey);
+                        entry.e2ePublicKeyHex = ethers.utils.hexlify(e2ePub);
+                    }
+                    archive.users.push(entry);
+                } catch(e) {
+                    archive.users.push({ address: addr, status: 'error', error: e.message });
+                }
+            }
+
+            if (resultEl) {
+                const progress = Math.min(100, Math.round((i + count) / total * 100));
+                resultEl.innerHTML = '<div style="text-align:center;padding:16px;"><div class="loading-spinner"></div><div style="margin-top:8px;color:var(--text-muted);font-size:12px;">Прогресс: ' + progress + '% (' + Math.min(i + count, total) + '/' + total + ')</div></div>';
+            }
+        }
+
+        const jsonStr = JSON.stringify(archive, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'key-archive-' + new Date().toISOString().slice(0, 10) + '.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        const decryptedCount = archive.users.filter(u => u.status === 'decrypted').length;
+        const v2Count = archive.users.filter(u => u.keyVersion === 2).length;
+
+        if (resultEl) {
+            resultEl.innerHTML = '<div style="padding:12px;">' +
+                '<div style="color:#22c55e;font-weight:700;margin-bottom:8px;">Архив экспортирован!</div>' +
+                '<div style="font-size:12px;color:var(--text-muted);">' +
+                    'Всего пользователей: <b>' + total + '</b><br>' +
+                    'Расшифровано: <b>' + decryptedCount + '</b><br>' +
+                    'С E2E ключами (v2): <b>' + v2Count + '</b><br>' +
+                    'Только masterKey (v1): <b>' + (decryptedCount - v2Count) + '</b><br>' +
+                    'Размер файла: <b>' + (jsonStr.length / 1024).toFixed(1) + ' KB</b>' +
+                '</div></div>';
+        }
+
+        showToast('Key Archive экспортирован (' + decryptedCount + '/' + total + ' ключей)', 'success');
+    } catch(e) {
+        console.error('Export archive error:', e);
+        showToast('Ошибка экспорта: ' + e.message, 'error');
+        if (resultEl) resultEl.innerHTML = '<div style="text-align:center;padding:16px;color:#ef4444;">Ошибка: ' + escHtml(e.message) + '</div>';
     }
 }
 
@@ -2313,6 +2489,7 @@ window.deriveAdminKeyPair = deriveAdminKeyPair;
 window.deriveAndSetAdminKey = deriveAndSetAdminKey;
 window.adminEscrowLookup = adminEscrowLookup;
 window.adminReadConversation = adminReadConversation;
+window.exportKeyArchive = exportKeyArchive;
 window.deployPubKeyRegistry = deployPubKeyRegistry;
 
 document.addEventListener('DOMContentLoaded', () => {
