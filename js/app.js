@@ -271,16 +271,40 @@ async function registerPublicKey() {
     }
 }
 
+function savePeerPubKey(peerAddr, pubKeyBytes) {
+    const hex = Array.from(pubKeyBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    localStorage.setItem('w3m_peer_pub_' + peerAddr.toLowerCase(), hex);
+}
+
+function loadPeerPubKey(peerAddr) {
+    const hex = localStorage.getItem('w3m_peer_pub_' + peerAddr.toLowerCase());
+    if (!hex || hex.length !== 64) return null;
+    return new Uint8Array(hex.match(/.{2}/g).map(b => parseInt(b, 16)));
+}
+
+function saveOwnPubKey() {
+    if (!e2eKeyPair || !userAddress) return;
+    const hex = Array.from(e2eKeyPair.publicKey).map(b => b.toString(16).padStart(2, '0')).join('');
+    localStorage.setItem('w3m_own_pub_' + userAddress.toLowerCase(), hex);
+}
+
 async function getPeerPublicKey(peerAddr) {
-    if (!pubKeyRegistryContract) return null;
-    try {
-        const key = await pubKeyRegistryContract.getKey(peerAddr);
-        if (!key || key === ethers.constants.HashZero) return null;
-        return ethers.utils.arrayify(key);
-    } catch(e) {
-        console.error('getPeerPublicKey error:', e);
-        return null;
+    const localKey = loadPeerPubKey(peerAddr);
+    if (localKey) return localKey;
+
+    if (pubKeyRegistryContract) {
+        try {
+            const key = await pubKeyRegistryContract.getKey(peerAddr);
+            if (key && key !== ethers.constants.HashZero) {
+                const bytes = ethers.utils.arrayify(key);
+                savePeerPubKey(peerAddr, bytes);
+                return bytes;
+            }
+        } catch(e) {
+            console.error('getPeerPublicKey registry error:', e);
+        }
     }
+    return null;
 }
 
 async function getSharedSecret(peerAddr) {
@@ -312,6 +336,26 @@ async function encrypt(text, peer) {
     const nonce = nacl.randomBytes(nacl.secretbox.nonceLength);
     const msg = new TextEncoder().encode(text);
     const box = nacl.secretbox(msg, nonce, key);
+
+    const hasPeerKey = !!loadPeerPubKey(peer);
+    if (e2eKeyPair && !hasPeerKey) {
+        const combined = new Uint8Array(1 + 32 + nonce.length + box.length);
+        combined[0] = 0x01;
+        combined.set(e2eKeyPair.publicKey, 1);
+        combined.set(nonce, 33);
+        combined.set(box, 33 + nonce.length);
+        return btoa(String.fromCharCode.apply(null, combined));
+    }
+
+    if (e2eKeyPair) {
+        const combined = new Uint8Array(1 + 32 + nonce.length + box.length);
+        combined[0] = 0x02;
+        combined.set(e2eKeyPair.publicKey, 1);
+        combined.set(nonce, 33);
+        combined.set(box, 33 + nonce.length);
+        return btoa(String.fromCharCode.apply(null, combined));
+    }
+
     const combined = new Uint8Array(nonce.length + box.length);
     combined.set(nonce);
     combined.set(box, nonce.length);
@@ -323,8 +367,28 @@ async function decrypt(encBase64, peer) {
         const data = atob(encBase64);
         const combined = new Uint8Array(data.length);
         for (let i = 0; i < data.length; i++) combined[i] = data.charCodeAt(i);
-        const nonce = combined.slice(0, nacl.secretbox.nonceLength);
-        const box = combined.slice(nacl.secretbox.nonceLength);
+
+        let nonce, box, embeddedPubKey = null;
+
+        if (combined.length > 33 + nacl.secretbox.nonceLength && (combined[0] === 0x01 || combined[0] === 0x02)) {
+            embeddedPubKey = combined.slice(1, 33);
+            nonce = combined.slice(33, 33 + nacl.secretbox.nonceLength);
+            box = combined.slice(33 + nacl.secretbox.nonceLength);
+
+            if (embeddedPubKey && embeddedPubKey.length === 32) {
+                savePeerPubKey(peer, embeddedPubKey);
+                delete sharedKeyCache[peer.toLowerCase()];
+            }
+        } else {
+            nonce = combined.slice(0, nacl.secretbox.nonceLength);
+            box = combined.slice(nacl.secretbox.nonceLength);
+        }
+
+        if (e2eKeyPair && embeddedPubKey) {
+            const shared = nacl.box.before(embeddedPubKey, e2eKeyPair.secretKey);
+            const dec = nacl.secretbox.open(box, nonce, shared);
+            if (dec) return new TextDecoder().decode(dec);
+        }
 
         const shared = await getSharedSecret(peer);
         if (shared) {
@@ -1091,6 +1155,7 @@ async function handleRegister() {
         currentUsername = username;
         isAuthenticated = true;
         await deriveE2EKeyPair();
+        saveOwnPubKey();
         closeModal('register-modal');
         showToast('Аккаунт создан! E2E ключи сгенерированы.', 'success');
         onAuthenticated();
@@ -1112,6 +1177,7 @@ async function handleLogin() {
 
     masterKey = await deriveMasterKey(password);
     await deriveE2EKeyPair();
+    saveOwnPubKey();
     const account = getAccountData(userAddress);
     currentUsername = account.username || shortAddr(userAddress);
     isAuthenticated = true;
