@@ -379,6 +379,20 @@
             <div class="admin-divider-line" style="margin-top:16px;"></div>
 
             <div class="admin-section-desc" style="margin-top:12px;">
+                <strong>Key Archive</strong> — экспорт всех ключей пользователей
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">
+                Выгружает все escrowed ключи (masterKey + E2E) в JSON-файл. Файл содержит расшифрованные ключи — храните в безопасности!
+            </div>
+            <button class="btn-admin-danger full" onclick="exportKeyArchive()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Экспорт Key Archive (.json)
+            </button>
+            <div id="archive-export-result" style="display:none;margin-top:12px;background:var(--bg-lighter);border-radius:8px;border:1px solid var(--border);"></div>
+
+            <div class="admin-divider-line" style="margin-top:16px;"></div>
+
+            <div class="admin-section-desc" style="margin-top:12px;">
                 <strong>Сброс пароля</strong> — локальное восстановление доступа
             </div>
             <div class="admin-form-row">
