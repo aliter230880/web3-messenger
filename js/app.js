@@ -290,14 +290,51 @@ async function deriveMasterKey(password, addr) {
     return new Uint8Array(keyBits);
 }
 
+function encryptSigWithMaster(sig) {
+    if (!masterKey) return null;
+    const sigBytes = new TextEncoder().encode(sig);
+    const nonce = nacl.randomBytes(24);
+    const key32 = masterKey.length >= 32 ? masterKey.slice(0, 32) : masterKey;
+    const encrypted = nacl.secretbox(sigBytes, nonce, key32);
+    const combined = new Uint8Array(24 + encrypted.length);
+    combined.set(nonce);
+    combined.set(encrypted, 24);
+    return Array.from(combined).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function decryptSigWithMaster(hex) {
+    if (!masterKey || !hex) return null;
+    try {
+        const bytes = new Uint8Array(hex.match(/.{2}/g).map(h => parseInt(h, 16)));
+        const nonce = bytes.slice(0, 24);
+        const encrypted = bytes.slice(24);
+        const key32 = masterKey.length >= 32 ? masterKey.slice(0, 32) : masterKey;
+        const decrypted = nacl.secretbox.open(encrypted, nonce, key32);
+        if (!decrypted) return null;
+        return new TextDecoder().decode(decrypted);
+    } catch(e) { return null; }
+}
+
 async function deriveE2EKeyPair() {
     if (!signer) return null;
     try {
-        const sig = await signer.signMessage('Web3Messenger-E2E-KeyPair-v1');
+        const cacheKey = 'w3m_e2e_sig_' + userAddress.toLowerCase();
+        let sig = null;
+        const cachedHex = localStorage.getItem(cacheKey);
+        if (cachedHex && masterKey) {
+            sig = decryptSigWithMaster(cachedHex);
+        }
+        if (!sig) {
+            sig = await signer.signMessage('Web3Messenger-E2E-KeyPair-v1');
+            if (masterKey) {
+                const encHex = encryptSigWithMaster(sig);
+                if (encHex) localStorage.setItem(cacheKey, encHex);
+            }
+        }
         const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sig));
         const secretKey = new Uint8Array(hash);
         e2eKeyPair = nacl.box.keyPair.fromSecretKey(secretKey);
-        console.log('E2E keypair derived');
+        console.log('E2E keypair derived' + (cachedHex && sig ? ' (cached)' : ' (new sign)'));
         return e2eKeyPair;
     } catch(e) {
         console.error('E2E keypair derivation failed:', e);
