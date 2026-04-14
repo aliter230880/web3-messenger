@@ -434,15 +434,14 @@ async function getChatKey(peer) {
 }
 
 async function encrypt(text, peer) {
-    const { key, mode } = await getChatKey(peer);
     const nonce = nacl.randomBytes(nacl.secretbox.nonceLength);
     const msg = new TextEncoder().encode(text);
-    const box = nacl.secretbox(msg, nonce, key);
+    const addrKey = await getAddressKey(peer);
+    const box = nacl.secretbox(msg, nonce, addrKey);
 
     if (e2eKeyPair) {
-        const version = mode === 'dh' ? 0x02 : 0x01;
         const combined = new Uint8Array(1 + 32 + nonce.length + box.length);
-        combined[0] = version;
+        combined[0] = 0x01;
         combined.set(e2eKeyPair.publicKey, 1);
         combined.set(nonce, 33);
         combined.set(box, 33 + nonce.length);
@@ -463,6 +462,32 @@ async function decrypt(encBase64, peer) {
 
         let nonce, box, embeddedPubKey = null;
         let version = 0;
+
+        if (combined.length > 59 && combined[0] === 0x03) {
+            version = 0x03;
+            embeddedPubKey = combined.slice(1, 33);
+            nonce = combined.slice(33, 57);
+            const dhLen = (combined[57] << 8) | combined[58];
+            const dhBox = combined.slice(59, 59 + dhLen);
+            const addrBox = combined.slice(59 + dhLen);
+
+            if (embeddedPubKey.length === 32) {
+                savePeerPubKey(peer, embeddedPubKey);
+                delete sharedKeyCache[peer.toLowerCase()];
+            }
+
+            if (e2eKeyPair) {
+                const dhShared = nacl.box.before(embeddedPubKey, e2eKeyPair.secretKey);
+                const dec = nacl.secretbox.open(dhBox, nonce, dhShared);
+                if (dec) return new TextDecoder().decode(dec);
+            }
+
+            const addrKey = await getAddressKey(peer);
+            const decAddr = nacl.secretbox.open(addrBox, nonce, addrKey);
+            if (decAddr) return new TextDecoder().decode(decAddr);
+
+            return null;
+        }
 
         if (combined.length > 33 + nacl.secretbox.nonceLength && (combined[0] === 0x01 || combined[0] === 0x02)) {
             version = combined[0];
@@ -2493,7 +2518,7 @@ window.exportKeyArchive = exportKeyArchive;
 window.deployPubKeyRegistry = deployPubKeyRegistry;
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Web3 Messenger v12 loaded');
+    console.log('Web3 Messenger v15 loaded');
     renderWelcome();
     if (window.ethereum) {
         window.ethereum.on('accountsChanged', () => location.reload());
