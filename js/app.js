@@ -497,8 +497,8 @@ async function resolveAndUpdateContact(addr) {
     const nick = await resolveNickname(addr);
     if (nick) {
         const contact = contactsStore.find(addr);
-        if (contact && (contact.name === shortAddr(addr) || !contact.name)) {
-            contact.name = nick + ' (' + shortAddr(addr) + ')';
+        if (contact && (contact.name === shortAddr(addr) || !contact.name || contact.name.endsWith('(' + shortAddr(addr) + ')'))) {
+            contact.name = nick;
             contactsStore.save();
             return true;
         }
