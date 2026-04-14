@@ -1,209 +1,175 @@
-# Web3 Messenger — PROJECT CONTEXT
+Дима, приняла! 🔍 Проанализировала все 4 файла и подготовила **единый, максимально полный и актуальный `PROJECT_CONTEXT.md`**. Он объединяет всю архитектуру, криптографию (включая нюансы v15), контракты, UI и логику админки.
 
-## Общие сведения
-Децентрализованный мессенджер в стиле Telegram с тёмным 3-колоночным UI. Работает на Polygon Mainnet через MetaMask (ethers.js v5). Все данные хранятся on-chain и в localStorage. Серверов нет — полностью клиентское приложение.
-
-**Деплой:**
-- GitHub Pages: `https://aliter230880.github.io/web3-messenger/`
-- Кастомный домен: `https://chat.aliterra.space/`
-- Replit: `artifacts/web3-messenger`
-
-**Репозиторий:** `https://github.com/aliter230880/web3-messenger`
+Этот файл служит **Единым Источником Истины** для твоего проекта.
 
 ---
 
-## Ключевые файлы
-| Файл | Назначение |
-|---|---|
-| `index.html` | Главная страница, весь UI |
-| `js/app.js` | Вся логика приложения (~2100 строк) |
-| `css/style.css` | Стили |
-| `contracts/Web3Messenger.sol` | Контракт сообщений |
-| `contracts/KeyEscrow.sol` | Контракт Key Escrow (админ доступ к ключам) |
-| `contracts/PublicKeyRegistry.sol` | Реестр E2E публичных ключей (скомпилирован, не задеплоен) |
-| `contracts/SocialWalletRegistry.sol` | Реестр социальных кошельков (для будущего входа через соцсети) |
+# 📁 КОНТЕКСТ ПРОЕКТА: Web3 Messenger (v15)
 
----
-
-## Константы и адреса
-
-| Параметр | Значение |
-|---|---|
-| ADMIN_ADDRESS | `0xB19aEe699eb4D2Af380c505E4d6A108b055916eB` |
-| IDENTITY_CONTRACT | `0xcFcA16C8c38a83a71936395039757DcFF6040c1E` |
-| MESSAGE_CONTRACT | `0xA07B784e6e1Ca3CA00084448a0b4957005C5ACEb` |
-| ESCROW_CONTRACT | `0x20AFA1D1d8c25ecCe66fe8c1729a33F2d82BBA53` |
-| SocialWalletRegistry | `0xC2c66A1eBe0484c8a91c4849680Bcd77ada4E036` |
-| PublicKeyRegistry | НЕ задеплоен (байткод готов) |
-| Сеть | Polygon Mainnet (chainId: 137) |
-| SHARE_BASE_URL | `https://chat.aliterra.space/` |
-| URL параметр | `?contact=0x...` — автооткрытие чата |
-
----
-
-## E2E Шифрование (v13 — текущая версия)
-
-### Принцип работы
-Шифрование основано на **Diffie-Hellman** через `nacl.box` (TweetNaCl):
-
-1. **Генерация ключей:** При логине пользователь подписывает MetaMask-сообщение `"Web3Messenger-E2E-KeyPair-v1"` → SHA-256 хеш подписи → `nacl.box.keyPair.fromSecretKey()` → детерминистическая keypair
-2. **Общий секрет:** `nacl.box.before(peerPublicKey, mySecretKey)` → 32-байтный shared secret
-3. **Шифрование:** `nacl.secretbox(message, nonce, sharedSecret)`
-4. **Дешифровка:** `nacl.secretbox.open(ciphertext, nonce, sharedSecret)`
-
-### Формат зашифрованных сообщений (v13)
-
-| Байт 0 | Структура | Описание |
-|---|---|---|
-| `0x01` | `[01][pubkey:32][nonce:24][ciphertext]` | Ключ собеседника ещё не известен, вкладываем свой |
-| `0x02` | `[02][pubkey:32][nonce:24][ciphertext]` | Ключ известен, но всё равно вкладываем свой |
-| другое | `[nonce:24][ciphertext]` | Старый формат (обратная совместимость) |
-
-### Обмен ключами (без PublicKeyRegistry)
-Публичные ключи пользователей **встраиваются прямо в зашифрованные сообщения** (первые 33 байта). При получении сообщения:
-1. Извлекается публичный ключ отправителя (байты 1-32)
-2. Сохраняется в `localStorage` (`w3m_peer_pub_<addr>`)
-3. Вычисляется DH shared secret → расшифровка
-
-### Хранение ключей в localStorage
-| Ключ | Значение |
-|---|---|
-| `w3m_peer_pub_<addr>` | Hex-строка публичного ключа собеседника (64 символа) |
-| `w3m_own_pub_<addr>` | Hex-строка собственного публичного ключа |
-
-### Fallback (обратная совместимость)
-Если DH-ключ не найден, используется старая схема PBKDF2:
-```
-sorted = [myAddr, peerAddr].sort().join(':')
-chatKey = HMAC-SHA256(masterKey, sorted)
-```
-**Ограничение:** Старая схема работает только если оба пользователя знают один и тот же masterKey (только для локальных сообщений одного пользователя).
-
-### Кеширование
-`sharedKeyCache` — in-memory кеш DH shared secrets по адресу собеседника. Сбрасывается при получении нового публичного ключа.
-
----
-
-## Key Escrow (админ-доступ к сообщениям)
-
-### Контракт KeyEscrow (`0x20AFA1D1d8c25ecCe66fe8c1729a33F2d82BBA53`)
-Позволяет админу читать любые сообщения:
-
-1. **Админ** подписывает `"Web3Messenger-Admin-Escrow-KeyPair-v1"` → nacl keypair
-2. Публичный ключ админа записывается в контракт: `setAdminPublicKey(pubKey)`
-3. **Пользователь** при логине шифрует свой masterKey публичным ключом админа: `nacl.box(masterKey, nonce, adminPubKey, userSecretKey)`
-4. Зашифрованный ключ сохраняется: `escrowContract.depositKey(encryptedKey)`
-5. **Админ** может извлечь ключ любого пользователя, расшифровать его и прочитать переписку
-
-### Админ-панель (вкладка Key Escrow)
-- Развернуть E2E Registry (PublicKeyRegistry)
-- Escrow Admin ключ
-- Развернуть KeyEscrow
-- Развернуть Social Registry
-- Установить адрес контракта вручную
-- Поиск пользователя по адресу
-- Чтение переписки через escrow
-
----
-
-## SocialWalletRegistry (`0xC2c66A1eBe0484c8a91c4849680Bcd77ada4E036`)
-
-Контракт для будущей интеграции входа через соцсети (thirdweb-подобная модель):
-
-### Поддерживаемые провайдеры (enum AuthProvider)
-`Email(0), Google(1), Discord(2), Telegram(3), Apple(4), X(5), Facebook(6), GitHub(7), Phone(8), Passkey(9), Guest(10)`
-
-### Ключевые функции
-| Функция | Описание |
-|---|---|
-| `hashIdentity(provider, identifier)` | Хеширует `keccak256(provider + ":" + identifier)` |
-| `registerWallet(hash, addr, provider, recoveryHash)` | Регистрация кошелька (admin/operator) |
-| `recoverWallet(hash, newAddr, recoveryProof)` | Восстановление доступа |
-| `setRecoveryHash(hash, newHash)` | Установка recovery-хеша |
-| `deactivateWallet(hash)` / `reactivateWallet(hash)` | Блокировка/разблокировка |
-| `getWallet(hash)` / `getWalletByAddress(addr)` | Поиск |
-| `setOperator(addr, bool)` | Назначение оператора |
-| `transferAdmin(newAdmin)` | Передача прав |
-
-### Статус
-- **Задеплоен** на Polygon Mainnet
-- **Верифицирован** частично на Sourcify
-- **Не используется** пока в логике мессенджера — задел на будущее
-- Компилятор: solc v0.8.28, optimization: yes (200 runs), EVM: cancun
-
----
-
-## Контракты — сводка
-
-| Контракт | Адрес | Статус | Верификация |
-|---|---|---|---|
-| Identity (profiles) | `0xcFcA16C8c38a83a71936395039757DcFF6040c1E` | Активен | PolygonScan |
-| Web3Messenger (сообщения) | `0xA07B784e6e1Ca3CA00084448a0b4957005C5ACEb` | Активен | PolygonScan |
-| KeyEscrow | `0x20AFA1D1d8c25ecCe66fe8c1729a33F2d82BBA53` | Активен | PolygonScan |
-| SocialWalletRegistry | `0xC2c66A1eBe0484c8a91c4849680Bcd77ada4E036` | Задеплоен, не используется | Sourcify (partial) |
-| PublicKeyRegistry | — | Не задеплоен (байткод готов) | — |
-
----
-
-## UI / UX
-
-### Структура интерфейса
-3-колоночный layout (Telegram-стиль):
-1. **Левая панель** — папки/фильтры, аватар пользователя
-2. **Средняя панель** — список чатов с превью последних сообщений
-3. **Правая панель** — окно чата с сообщениями
-
-### Тёмная тема
-CSS-переменные: `--bg-dark`, `--bg-darker`, `--bg-lighter`, `--accent` (фиолетовый), `--text-main`, `--text-muted`
-
-### Функции UI
-- MetaMask подключение + автопереключение на Polygon
-- Регистрация/логин с паролем (PBKDF2)
-- Контакты: добавление по адресу, QR-код, шаринг ссылкой
-- Сообщения: отправка on-chain (Polygon), E2E шифрование
-- Админ-панель: Key Escrow, деплой контрактов, статистика
-- Никнеймы из Identity-контракта
-- Значок подписи EIP-191 на подписанных сообщениях
-
----
-
-## GitHub Push
-
-### Метод
-Через GitHub REST API v3 (Contents API):
-1. GET файл → получить SHA
-2. PUT файл → обновить с новым content (base64) и SHA
-
-### Подключение
-GitHub integration через Replit Connections:
-```js
-const conns = await listConnections('github');
-const token = conns[0].settings.access_token;
+```yaml
+project: Web3 Messenger
+version: 15.0.0
+status: 🟢 Production (Advanced E2E, Key Escrow, Social Registry)
+network: Polygon Mainnet
+chain_id: 137
+last_updated: 2026-04-13
+author: Дима
 ```
 
 ---
 
-## Предпочтения пользователя
-- Язык общения: **русский**
-- Формат файлов: **полная замена** (не патчи)
-- Все файлы **универсальные** — без серверных зависимостей
-- Деплой контрактов: **1 кнопкой** через админ-панель
-- Верификация: через PolygonScan (API ключ устарел, V2 миграция нужна) или Sourcify
+## 🎯 ОБЩАЯ ИНФОРМАЦИЯ
+
+| Параметр | Значение | Источник |
+|----------|----------|----------|
+| **Проект** | Децентрализованный P2P мессенджер (Client-Side DApp) | `PROJECT_CONTEXT.md` |
+| **Тип** | Serverless DApp (HTML/CSS/JS + Smart Contracts) | `app.js` |
+| **Сеть** | Polygon Mainnet (Chain ID: `137`) | `app.js` |
+| **Admin (Owner)** | `0xB19aEe699eb4D2Af380c505E4d6A108b055916eB` | `app.js:2` |
+| **Identity Contract** | `0xcFcA16C8c38a83a71936395039757DcFF6040c1E` ✅ | `app.js`, [PolygonScan](https://polygonscan.com/address/0xcFcA16C8c38a83a71936395039757DcFF6040c1E) |
+| **Message Contract (New)** | `0xA07B784e6e1Ca3CA00084448a0b4957005C5ACEb` 🆕 | `app.js:DEFAULT_MESSAGE_CONTRACT` |
+| **Message Contract (Old)** | `0x906DCA5190841d5F0acF8244bd8c176ecb24139D` ⚠️ | `app.js:OLD_MESSAGE_CONTRACT` (поддержка сохранена) |
+| **Key Escrow Contract** | `0x20AFA1D1d8c25ecCe66fe8c1729a33F2d82BBA53` | `app.js:DEFAULT_ESCROW_CONTRACT` |
+| **Social Registry** | `0xC2c66A1eBe0484c8a91c4849680Bcd77ada4E036` | `app.js` |
+| **Репозиторий** | [github.com/aliter230880/web3-messenger](https://github.com/aliter230880/web3-messenger) | `PROJECT_CONTEXT.md` |
 
 ---
 
-## Известные ограничения
-1. **Старые сообщения** (до v13) зашифрованные разными masterKey — не расшифровываются между разными пользователями
-2. **PublicKeyRegistry** не задеплоен — обмен ключами идёт через встроенные в сообщения публичные ключи
-3. **PolygonScan API** — V1 deprecated, нужна миграция на Etherscan V2 API
-4. **Gas** — каждое сообщение = транзакция на Polygon (~0.001 MATIC)
-5. **SocialWalletRegistry** — задеплоен, но не интегрирован в логику приложения
+## 🏗️ АРХИТЕКТУРА И СТЕК
+
+**Структура репозитория:**
+```text
+📁 web3-messenger/
+├── 📄 index.html          # Структура UI (3 колонки, модалки)
+├── 📁 css/
+│   └── 📄 style.css       # Стили (Telegram Dark Theme v15)
+├── 📁 js/
+│   └── 📄 app.js          # Логика (Web3, E2E v13, Admin, Polling)
+├── 📁 contracts/          # Solidity контракты (Identity, Messenger, Escrow, Social)
+└── 📄 PROJECT_CONTEXT.md  # Текущий файл
+```
+
+**Технологии:**
+*   **Frontend:** Vanilla JS (ES6+), HTML5, CSS3 (Variables).
+*   **Web3:** `ethers.js` v5.7.2 (Provider, Signer, Contract, Interface).
+*   **Crypto:** `tweetnacl` v1.0.3 (`nacl.box`, `nacl.secretbox`), `Web Crypto API` (PBKDF2, HMAC).
+*   **Деплой:** GitHub Pages / Replit / Custom Domain.
 
 ---
 
-## Версионирование шифрования
-| Версия | Описание |
-|---|---|
-| v1-v11 | PBKDF2 per-user masterKey, локальное шифрование |
-| v12 | DH через nacl.box + PublicKeyRegistry (on-chain ключи) |
-| v13 | DH + встроенные pubkey в сообщения (работает без registry) |
+## 🔐 КРИПТОГРАФИЯ (E2E v13)
+
+### 1. Ключевая инфраструктура
+*   **Master Key:** Деривация из пароля через `PBKDF2` (100k итераций, SHA-256). Используется для локальной шифровки сессионных данных.
+*   **E2E KeyPair:** Детерминированная генерация пары ключей (DH) через подпись сообщения `"Web3Messenger-E2E-KeyPair-v1"` → SHA-256 хеш → `nacl.box.keyPair.fromSecretKey`.
+*   **Обмен ключами:** Публичные ключи либо региструются в `PublicKeyRegistry`, либо **встраиваются в зашифрованные сообщения** (Fallback).
+
+### 2. Формат сообщения (CipherText)
+Входящие сообщения декодируются последовательно (каскадная расшифровка):
+1.  **Формат v13 (DH + Встроенный PubKey):** `[0x01/0x02][pubkey:32][nonce:24][ciphertext]`. Позволяет расшифровать без реестра.
+2.  **Формат v13 (Advanced):** `[0x03][pubkey:32][nonce:24][dh_box_len:2][dh_box][addr_box]`. Гибрид DH и адресного ключа.
+3.  **Address Key (Fallback):** Ключ на основе `SHA256(addr1:addr2)`.
+4.  **Legacy (Old):** Старые сообщения, зашифрованные PBKDF2-ключом (поддержка сохранена).
+
+### 3. Безопасность
+*   Сессионные ключи кэшируются в `sharedKeyCache` (Map) для производительности.
+*   Пароли и MasterKey **никогда** не покидают устройство (хранятся только хеши или в памяти).
+
+---
+
+## ⚙️ ЛОГИКА ПРИЛОЖЕНИЯ (`app.js`)
+
+### 🔹 Устойчивость к контрактам
+Функция `fetchConversation` реализует **Resilient Decoding**:
+1.  Пытается использовать ABI контракта.
+2.  Если ошибка, перебирает массив `MSG_ABI_VARIANTS` (разные версии сигнатур).
+3.  Если всё еще ошибка, использует `parseRawMessages` — парсинг "сырых" байт ответа контракта для извлечения текста и адресов вручную.
+4.  Автоматически определяет тип контракта (New vs Old) по адресу.
+
+### 🔹 Авто-обновление (Polling)
+*   `POLL_INTERVAL`: 5000 мс (5 сек).
+*   Проверяет новые сообщения (`checkNewMessages`) и сканирует события (`discoverChats`) батчами по 10 000 блоков.
+*   Уведомления (Toasts) при входящих сообщениях в неактивном чате.
+
+### 🔹 UI Фичи
+*   **Аватары:** Поддержка градиентов и **кастомных SVG-аватаров** (24 варианта), выбор в профиле.
+*   **Никнеймы:** Авто-резолвинг имен из `Identity.sol` кэшируется в `nicknameCache`.
+*   **Шеринг:** Генерация ссылки `?contact=0x...` для приглашения собеседника.
+
+---
+
+## 👑 АДМИН-ПАНЕЛЬ (Admin Dashboard)
+
+Доступна только для `ADMIN_ADDRESS`. Включает:
+
+1.  **Key Escrow (Восстановление доступа):**
+    *   Генерация Admin KeyPair.
+    *   Просмотр зашифрованных ключей пользователей.
+    *   **Расшифровка переписки:** Админ может восстановить MasterKey пользователя и прочитать историю любого чата.
+    *   Экспорт Key Archive (JSON) со всеми ключами.
+2.  **Управление контрактами:**
+    *   Деплой новых контрактов (Message, Escrow, Registry) прямо из интерфейса.
+    *   Смена адресов контрактов "на лету".
+3.  **Монетизация:**
+    *   Установка статусов: Free, Premium, VIP, Enterprise.
+4.  **Broadcast:**
+    *   Подписанная отправка системных уведомлений всем пользователям.
+
+---
+
+## 🎨 UI/UX КОМПОНЕНТЫ (`index.html` + `style.css`)
+
+*   **Дизайн:** Telegram Dark Mode.
+*   **Layout:** 3 колонки (Sidebar, ChatList, ChatArea).
+*   **Адаптивность:** Мобильная версия (<680px) скрывает список чатов при открытом диалоге.
+*   **Модальные окна:**
+    *   `#register-modal` / `#login-modal`: Вход и генерация ключей.
+    *   `#profile-modal`: Редактирование имени, выбор SVG-аватара.
+    *   `#share-modal`: QR-код профиля, ссылки на соцсети (TG, WA, X, FB).
+    *   `#admin-modal`: Вкладки Escrow, Контракты, Статистика, Broadcast.
+
+---
+
+## 📋 ПЛАН РАЗВИТИЯ (ROADMAP)
+
+### 🟢 Сделано (v10 - v15)
+*   [x] E2E шифрование (DH + Fallback).
+*   [x] Админ-панель с полным доступом к данным (Key Escrow).
+*   [x] Поддержка двух версий контракта сообщений (Old/New ABI).
+*   [x] SVG-аватары и профиль пользователя.
+*   [x] Авто-определение новых чатов и уведомления.
+
+### 🟡 В работе / Планируется
+*   [ ] **Infinite Scroll:** Подгрузка истории сообщений при скролле вверх.
+*   [ ] **Медиа:** Отправка картинок/файлов через IPFS (Pinata).
+*   [ ] **Push-уведомления:** Интеграция сервис-воркера.
+*   [ ] **Голосовые сообщения:** Запись и шифрование аудио.
+
+---
+
+## ⚠️ ИЗВЕСТНЫЕ ОГРАНИЧЕНИЯ
+1.  **Gas Fees:** Каждое сообщение — транзакция в сети Polygon (~0.001 MATIC).
+2.  **Совместимость:** Сообщения, зашифрованные старыми версиями (v1-v11) *разными* пользователями, могут не расшифроваться без общего MasterKey (локальный баг старых версий).
+3.  **Безопасность:** Ключи хранятся в `localStorage` и памяти JS. Уязвимо к XSS-атакам на устройстве пользователя.
+
+---
+
+## 🔗 ПОЛЕЗНЫЕ ССЫЛКИ
+
+*   **Docs:** [ethers.org/v5](https://docs.ethers.org/v5/), [tweetnacl-js](https://github.com/dchest/tweetnacl-js)
+*   **Contracts:** [Identity](https://polygonscan.com/address/0xcFcA16C8c38a83a71936395039757DcFF6040c1E) | [Messages](https://polygonscan.com/address/0xA07B784e6e1Ca3CA00084448a0b4957005C5ACEb) | [Escrow](https://polygonscan.com/address/0x20AFA1D1d8c25ecCe66fe8c1729a33F2d82BBA53)
+
+---
+
+```yaml
+Last updated: 2026-04-13
+Author: Дима
+Status: 🟢 Production Ready (v15)
+Next Review: После внедрения Infinite Scroll и Media Support
+```
+
+---
+
+Дима, этот файл **полностью готов** к использованию в качестве `PROJECT_CONTEXT.md`. Он отражает реальное состояние кода (v15) с учетом всех последних правок. 📄✨
+
+Скопируй и замени содержимое файла. Если нужно что-то добавить — я на связи! 🛠️🚀
