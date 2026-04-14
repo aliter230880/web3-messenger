@@ -419,36 +419,30 @@ async function getSharedSecret(peerAddr) {
     return shared;
 }
 
+async function getAddressKey(peer) {
+    const sorted = [userAddress.toLowerCase(), peer.toLowerCase()].sort().join(':web3m:');
+    const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sorted));
+    return new Uint8Array(hash);
+}
+
 async function getChatKey(peer) {
     const shared = await getSharedSecret(peer);
-    if (shared) return shared;
+    if (shared) return { key: shared, mode: 'dh' };
 
-    if (!masterKey) throw new Error("No encryption key available");
-    const sorted = [userAddress.toLowerCase(), peer.toLowerCase()].sort().join(':');
-    const cryptoKey = await crypto.subtle.importKey("raw", masterKey, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-    const sig = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(sorted));
-    return new Uint8Array(sig);
+    const addrKey = await getAddressKey(peer);
+    return { key: addrKey, mode: 'addr' };
 }
 
 async function encrypt(text, peer) {
-    const key = await getChatKey(peer);
+    const { key, mode } = await getChatKey(peer);
     const nonce = nacl.randomBytes(nacl.secretbox.nonceLength);
     const msg = new TextEncoder().encode(text);
     const box = nacl.secretbox(msg, nonce, key);
 
-    const hasPeerKey = !!loadPeerPubKey(peer);
-    if (e2eKeyPair && !hasPeerKey) {
-        const combined = new Uint8Array(1 + 32 + nonce.length + box.length);
-        combined[0] = 0x01;
-        combined.set(e2eKeyPair.publicKey, 1);
-        combined.set(nonce, 33);
-        combined.set(box, 33 + nonce.length);
-        return btoa(String.fromCharCode.apply(null, combined));
-    }
-
     if (e2eKeyPair) {
+        const version = mode === 'dh' ? 0x02 : 0x01;
         const combined = new Uint8Array(1 + 32 + nonce.length + box.length);
-        combined[0] = 0x02;
+        combined[0] = version;
         combined.set(e2eKeyPair.publicKey, 1);
         combined.set(nonce, 33);
         combined.set(box, 33 + nonce.length);
@@ -468,8 +462,10 @@ async function decrypt(encBase64, peer) {
         for (let i = 0; i < data.length; i++) combined[i] = data.charCodeAt(i);
 
         let nonce, box, embeddedPubKey = null;
+        let version = 0;
 
         if (combined.length > 33 + nacl.secretbox.nonceLength && (combined[0] === 0x01 || combined[0] === 0x02)) {
+            version = combined[0];
             embeddedPubKey = combined.slice(1, 33);
             nonce = combined.slice(33, 33 + nacl.secretbox.nonceLength);
             box = combined.slice(33 + nacl.secretbox.nonceLength);
@@ -484,10 +480,14 @@ async function decrypt(encBase64, peer) {
         }
 
         if (e2eKeyPair && embeddedPubKey) {
-            const shared = nacl.box.before(embeddedPubKey, e2eKeyPair.secretKey);
-            const dec = nacl.secretbox.open(box, nonce, shared);
+            const dhShared = nacl.box.before(embeddedPubKey, e2eKeyPair.secretKey);
+            const dec = nacl.secretbox.open(box, nonce, dhShared);
             if (dec) return new TextDecoder().decode(dec);
         }
+
+        const addrKey = await getAddressKey(peer);
+        const decAddr = nacl.secretbox.open(box, nonce, addrKey);
+        if (decAddr) return new TextDecoder().decode(decAddr);
 
         const shared = await getSharedSecret(peer);
         if (shared) {
