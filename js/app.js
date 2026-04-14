@@ -149,6 +149,68 @@ const AVATAR_COLORS = [
     ['#a855f7','#c084fc']
 ];
 
+const DEFAULT_AVATARS = (function() {
+    function svg(bg1, bg2, skin, hair, extra) {
+        return "data:image/svg+xml," + encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
+            '<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="' + bg1 + '"/><stop offset="100%" stop-color="' + bg2 + '"/></linearGradient></defs>' +
+            '<rect width="100" height="100" fill="url(#bg)" rx="50"/>' +
+            '<circle cx="50" cy="42" r="20" fill="' + skin + '"/>' +
+            '<circle cx="42" cy="39" r="2.5" fill="#333"/><circle cx="58" cy="39" r="2.5" fill="#333"/>' +
+            '<path d="M44 48 Q50 53 56 48" stroke="#333" fill="none" stroke-width="1.5" stroke-linecap="round"/>' +
+            '<ellipse cx="50" cy="80" rx="28" ry="22" fill="' + hair + '"/>' +
+            extra + '</svg>'
+        );
+    }
+    const skins = ['#FDDCB5','#F5C5A3','#D4A373','#C68642','#8D5524','#FDDCB5','#F5C5A3','#E8B894','#C68642','#D4A373','#FDDCB5','#F5C5A3'];
+    return [
+        svg('#3b82f6','#1d4ed8','#FDDCB5','#4a90d9','<path d="M30 32 Q35 15 50 18 Q65 15 70 32 Q65 22 50 24 Q35 22 30 32Z" fill="#2c1810"/>'),
+        svg('#6366f1','#4f46e5','#F5C5A3','#6366f1','<path d="M28 35 Q35 12 50 15 Q65 12 72 35 L70 30 Q60 18 50 20 Q40 18 30 30Z" fill="#1a1a2e"/>'),
+        svg('#22c55e','#16a34a','#D4A373','#22c55e','<path d="M30 33 Q40 18 50 20 Q60 18 70 33 Q65 25 50 23 Q35 25 30 33Z" fill="#4a3728"/><rect x="38" y="35" width="10" height="4" rx="2" fill="#22c55e" opacity="0.6"/><rect x="52" y="35" width="10" height="4" rx="2" fill="#22c55e" opacity="0.6"/>'),
+        svg('#f59e0b','#d97706','#C68642','#f59e0b','<path d="M28 30 Q35 10 50 14 Q65 10 72 30 Q68 20 50 18 Q32 20 28 30Z" fill="#1a0f00"/>'),
+        svg('#ef4444','#dc2626','#8D5524','#ef4444','<path d="M30 35 Q38 20 50 22 Q62 20 70 35 Q65 26 50 25 Q35 26 30 35Z" fill="#0a0a0a"/>'),
+        svg('#06b6d4','#0891b2','#FDDCB5','#06b6d4','<path d="M30 32 Q40 15 50 18 Q60 15 70 32 Q62 20 50 22 Q38 20 30 32Z" fill="#8B4513"/><circle cx="50" cy="18" r="3" fill="#06b6d4"/>'),
+        svg('#8b5cf6','#7c3aed','#E8B894','#8b5cf6','<path d="M32 30 Q38 8 50 12 Q62 8 68 30 Q64 16 50 15 Q36 16 32 30Z" fill="#2c1810"/><path d="M28 33 L32 30" stroke="#2c1810" stroke-width="3"/><path d="M72 33 L68 30" stroke="#2c1810" stroke-width="3"/>'),
+        svg('#14b8a6','#0d9488','#F5C5A3','#14b8a6','<path d="M30 30 Q35 14 50 16 Q65 14 70 30 Q60 20 50 22 Q40 20 30 30Z" fill="#D4A373"/><rect x="35" y="36" width="12" height="5" rx="2" fill="rgba(0,0,0,0.15)"/><rect x="53" y="36" width="12" height="5" rx="2" fill="rgba(0,0,0,0.15)"/>'),
+        svg('#f97316','#ea580c','#D4A373','#f97316','<path d="M28 34 Q30 10 50 14 Q70 10 72 34 Q66 20 50 18 Q34 20 28 34Z" fill="#1a0f00"/><path d="M50 52 L50 56" stroke="#333" stroke-width="1.5" stroke-linecap="round"/>'),
+        svg('#64748b','#475569','#C68642','#64748b','<path d="M32 32 Q40 18 50 20 Q60 18 68 32 Q62 24 50 23 Q38 24 32 32Z" fill="#0a0a0a"/><path d="M36 50 Q42 52 44 48" stroke="#333" fill="none" stroke-width="1"/><path d="M56 48 Q58 52 64 50" stroke="#333" fill="none" stroke-width="1"/>'),
+        svg('#a855f7','#9333ea','#FDDCB5','#a855f7','<path d="M30 33 Q38 15 50 18 Q62 15 70 33 Q64 22 50 20 Q36 22 30 33Z" fill="#D35400"/><path d="M68 25 L75 20" stroke="#D35400" stroke-width="2"/>'),
+        svg('#10b981','#059669','#F5C5A3','#10b981','<path d="M32 30 Q38 14 50 16 Q62 14 68 30 Q60 20 50 18 Q40 20 32 30Z" fill="#2c1810"/><ellipse cx="50" cy="42" rx="3" ry="2" fill="none" stroke="#333" stroke-width="0.8"/>'),
+        svg('#ec4899','#db2777','#FDDCB5','#ec4899','<path d="M25 38 Q30 8 50 12 Q70 8 75 38 Q72 18 50 16 Q28 18 25 38Z" fill="#4a2028"/><circle cx="42" cy="30" r="1.5" fill="#ec4899"/><circle cx="58" cy="30" r="1.5" fill="#ec4899"/>'),
+        svg('#f43f5e','#e11d48','#F5C5A3','#f43f5e','<path d="M26 36 Q30 10 50 14 Q70 10 74 36 Q70 16 50 18 Q30 16 26 36Z" fill="#1a0f00"/><path d="M30 34 Q28 30 26 36" fill="#1a0f00"/><path d="M70 34 Q72 30 74 36" fill="#1a0f00"/>'),
+        svg('#d946ef','#c026d3','#D4A373','#d946ef','<path d="M28 35 Q35 12 50 15 Q65 12 72 35 Q66 20 50 18 Q34 20 28 35Z" fill="#2c1810"/><path d="M26 35 Q24 25 28 35" fill="#2c1810"/><path d="M74 35 Q76 25 72 35" fill="#2c1810"/>'),
+        svg('#0ea5e9','#0284c7','#E8B894','#0ea5e9','<path d="M28 36 Q32 10 50 14 Q68 10 72 36 Q68 18 50 16 Q32 18 28 36Z" fill="#0a0a0a"/><path d="M30 36 L26 42" stroke="#0a0a0a" stroke-width="3"/><path d="M70 36 L74 42" stroke="#0a0a0a" stroke-width="3"/>'),
+        svg('#84cc16','#65a30d','#FDDCB5','#84cc16','<path d="M30 30 Q38 14 50 16 Q62 14 70 30 Q60 18 50 20 Q40 18 30 30Z" fill="#5C4033"/><circle cx="44" cy="26" r="2" fill="#84cc16"/>'),
+        svg('#f472b6','#ec4899','#C68642','#f472b6','<path d="M24 40 Q28 8 50 12 Q72 8 76 40 Q72 16 50 14 Q28 16 24 40Z" fill="#1a0a12"/><circle cx="38" cy="20" r="2.5" fill="#f472b6" opacity="0.5"/><circle cx="62" cy="20" r="2.5" fill="#f472b6" opacity="0.5"/>'),
+        svg('#fb923c','#f97316','#F5C5A3','#fb923c','<path d="M30 32 Q38 16 50 18 Q62 16 70 32 Q60 22 50 20 Q40 22 30 32Z" fill="#8B0000"/><path d="M30 32 Q28 28 26 34" fill="#8B0000"/>'),
+        svg('#818cf8','#6366f1','#D4A373','#818cf8','<path d="M26 38 Q30 8 50 12 Q70 8 74 38 Q70 14 50 16 Q30 14 26 38Z" fill="#2c1810"/><path d="M34 32 L40 28 L46 32" stroke="#fff" fill="none" stroke-width="1.5"/><path d="M54 32 L60 28 L66 32" stroke="#fff" fill="none" stroke-width="1.5"/>'),
+        svg('#2dd4bf','#14b8a6','#8D5524','#2dd4bf','<path d="M32 30 Q40 16 50 18 Q60 16 68 30 Q58 22 50 20 Q42 22 32 30Z" fill="#0a0a0a"/><path d="M40 49 Q50 54 60 49" stroke="#333" fill="none" stroke-width="1.5" stroke-linecap="round"/>'),
+        svg('#fbbf24','#f59e0b','#FDDCB5','#fbbf24','<path d="M28 34 Q34 12 50 15 Q66 12 72 34 Q64 20 50 18 Q36 20 28 34Z" fill="#b8860b"/><path d="M38 36 L44 34 L38 32" stroke="rgba(0,0,0,0.2)" fill="none" stroke-width="1"/><path d="M62 36 L56 34 L62 32" stroke="rgba(0,0,0,0.2)" fill="none" stroke-width="1"/>'),
+        svg('#c084fc','#a855f7','#E8B894','#c084fc','<path d="M24 40 Q28 6 50 10 Q72 6 76 40 Q72 12 50 14 Q28 12 24 40Z" fill="#3d1a5e"/><circle cx="42" cy="14" r="2" fill="#c084fc" opacity="0.6"/><circle cx="58" cy="14" r="2" fill="#c084fc" opacity="0.6"/>'),
+        svg('#38bdf8','#0ea5e9','#F5C5A3','#38bdf8','<path d="M30 32 Q36 14 50 16 Q64 14 70 32 Q62 20 50 18 Q38 20 30 32Z" fill="#5C3317"/><circle cx="50" cy="14" r="4" fill="#38bdf8" opacity="0.3"/>')
+    ];
+})();
+
+let currentAvatarId = null;
+
+function getUserAvatarId(addr) {
+    const account = getAccountData(addr);
+    return (account && account.avatarId !== undefined) ? account.avatarId : null;
+}
+
+function setUserAvatarId(addr, id) {
+    const account = getAccountData(addr) || {};
+    account.avatarId = id;
+    setAccountData(addr, account);
+}
+
+function getPeerAvatarId(addr) {
+    try {
+        const raw = localStorage.getItem('w3m_peer_avatar_' + addr.toLowerCase());
+        return raw !== null ? parseInt(raw) : null;
+    } catch(e) { return null; }
+}
+
 function getAvatarColor(addr) {
     let hash = 0;
     const s = (addr || '').toLowerCase();
@@ -469,11 +531,21 @@ async function verifyPassword(addr, password) {
 }
 
 // ====================== UI HELPERS ======================
-function renderAvatarCircle(el, name, addr) {
+function renderAvatarCircle(el, name, addr, forceAvatarId) {
     if (!el) return;
-    const colors = getAvatarColor(addr);
-    el.style.background = 'linear-gradient(135deg, ' + colors[0] + ', ' + colors[1] + ')';
-    el.textContent = getInitials(name || shortAddr(addr));
+    const avId = forceAvatarId !== undefined ? forceAvatarId : (addr === userAddress ? currentAvatarId : getPeerAvatarId(addr));
+    if (avId !== null && avId >= 0 && avId < DEFAULT_AVATARS.length) {
+        el.style.background = 'none';
+        el.textContent = '';
+        el.style.backgroundImage = 'url("' + DEFAULT_AVATARS[avId] + '")';
+        el.style.backgroundSize = 'cover';
+        el.style.backgroundPosition = 'center';
+    } else {
+        el.style.backgroundImage = 'none';
+        const colors = getAvatarColor(addr);
+        el.style.background = 'linear-gradient(135deg, ' + colors[0] + ', ' + colors[1] + ')';
+        el.textContent = getInitials(name || shortAddr(addr));
+    }
 }
 
 function updateUserUI() {
@@ -588,9 +660,15 @@ function renderChatList() {
         const lastTime = lastMsg ? formatTime(lastMsg.timestamp) : '';
         const unread = c.unread || 0;
 
+        const peerAvId = getPeerAvatarId(c.address);
+        const avatarStyle = (peerAvId !== null && peerAvId >= 0 && peerAvId < DEFAULT_AVATARS.length)
+            ? 'background-image:url(\'' + DEFAULT_AVATARS[peerAvId] + '\');background-size:cover;background-position:center;'
+            : 'background:linear-gradient(135deg,' + colors[0] + ',' + colors[1] + ')';
+        const avatarContent = (peerAvId !== null && peerAvId >= 0 && peerAvId < DEFAULT_AVATARS.length) ? '' : getInitials(c.name);
+
         return '<div class="chat-item' + (isActive ? ' active' : '') + '" onclick="selectChat(\'' + c.address + '\')">' +
-            '<div class="chat-item-avatar" style="background:linear-gradient(135deg,' + colors[0] + ',' + colors[1] + ')">' +
-                getInitials(c.name) +
+            '<div class="chat-item-avatar" style="' + avatarStyle + '">' +
+                avatarContent +
                 (c.online ? '<div class="online-dot"></div>' : '') +
             '</div>' +
             '<div class="chat-item-info">' +
@@ -640,9 +718,8 @@ async function loadMessages(addr, silent) {
     inputBar.style.display = 'flex';
 
     const name = contactsStore.getName(addr);
-    const colors = getAvatarColor(addr);
-    document.getElementById('chat-avatar').style.background = 'linear-gradient(135deg,' + colors[0] + ',' + colors[1] + ')';
-    document.getElementById('chat-avatar').textContent = getInitials(name);
+    const chatAvatarEl = document.getElementById('chat-avatar');
+    renderAvatarCircle(chatAvatarEl, name, addr);
     document.getElementById('chat-name').textContent = name;
     document.getElementById('chat-status').textContent = 'был(а) недавно';
 
@@ -1122,6 +1199,7 @@ async function initWallet() {
         } else {
             const account = getAccountData(userAddress);
             currentUsername = account.username || shortAddr(userAddress);
+            currentAvatarId = (account && account.avatarId !== undefined) ? account.avatarId : null;
             openLoginModal();
         }
     } catch (e) {
@@ -1180,6 +1258,7 @@ async function handleLogin() {
     saveOwnPubKey();
     const account = getAccountData(userAddress);
     currentUsername = account.username || shortAddr(userAddress);
+    currentAvatarId = (account && account.avatarId !== undefined) ? account.avatarId : null;
     isAuthenticated = true;
 
     closeModal('login-modal');
@@ -1517,24 +1596,51 @@ function closeUserMenuOnClick(e) {
     if (!menu.contains(e.target) && e.target.id !== 'user-avatar-btn') menu.classList.add('hidden');
 }
 
+let pendingAvatarId = null;
+
 function openProfileModal() {
     document.getElementById('user-dropdown-menu').classList.add('hidden');
     const modal = document.getElementById('profile-modal');
     modal.style.display = 'flex';
+    pendingAvatarId = currentAvatarId;
     renderAvatarCircle(document.getElementById('profile-avatar-large'), currentUsername, userAddress);
     document.getElementById('profile-username-display').textContent = currentUsername;
     document.getElementById('profile-address-display').textContent = shortAddr(userAddress);
     document.getElementById('profile-username-edit').value = currentUsername;
+    renderAvatarPicker();
+}
+
+function renderAvatarPicker() {
+    const grid = document.getElementById('avatar-picker-grid');
+    if (!grid) return;
+    let html = '<div class="avatar-pick-item' + (pendingAvatarId === null ? ' selected' : '') + '" onclick="pickAvatar(-1)" title="Инициалы">' +
+        '<div class="avatar-pick-circle avatar-pick-initials" style="background:linear-gradient(135deg,' + getAvatarColor(userAddress)[0] + ',' + getAvatarColor(userAddress)[1] + ')">' +
+        getInitials(currentUsername || shortAddr(userAddress)) + '</div></div>';
+    for (let i = 0; i < DEFAULT_AVATARS.length; i++) {
+        const sel = pendingAvatarId === i ? ' selected' : '';
+        html += '<div class="avatar-pick-item' + sel + '" onclick="pickAvatar(' + i + ')">' +
+            '<img class="avatar-pick-circle" src="' + DEFAULT_AVATARS[i] + '" alt="Avatar ' + (i+1) + '"/></div>';
+    }
+    grid.innerHTML = html;
+}
+
+function pickAvatar(id) {
+    pendingAvatarId = id < 0 ? null : id;
+    renderAvatarCircle(document.getElementById('profile-avatar-large'), currentUsername, userAddress, pendingAvatarId);
+    renderAvatarPicker();
 }
 
 function saveProfile() {
     const newName = document.getElementById('profile-username-edit').value.trim();
     if (!newName || newName.length < 2) { showToast('Имя минимум 2 символа', 'error'); return; }
     currentUsername = newName;
-    const account = getAccountData(userAddress);
+    currentAvatarId = pendingAvatarId;
+    const account = getAccountData(userAddress) || {};
     account.username = newName;
+    account.avatarId = currentAvatarId;
     setAccountData(userAddress, account);
     updateUserUI();
+    renderChatList();
     closeModal('profile-modal');
     showToast('Профиль обновлён', 'success');
 }
@@ -1553,8 +1659,13 @@ function renderContactsList() {
     }
     list.innerHTML = contactsStore.list.map(c => {
         const colors = getAvatarColor(c.address);
+        const cAvId = getPeerAvatarId(c.address);
+        const cAvStyle = (cAvId !== null && cAvId >= 0 && cAvId < DEFAULT_AVATARS.length)
+            ? 'background-image:url(\'' + DEFAULT_AVATARS[cAvId] + '\');background-size:cover;background-position:center;'
+            : 'background:linear-gradient(135deg,' + colors[0] + ',' + colors[1] + ')';
+        const cAvText = (cAvId !== null && cAvId >= 0 && cAvId < DEFAULT_AVATARS.length) ? '' : getInitials(c.name);
         return '<div class="contact-item">' +
-            '<div class="contact-item-avatar" style="background:linear-gradient(135deg,' + colors[0] + ',' + colors[1] + ')">' + getInitials(c.name) + '</div>' +
+            '<div class="contact-item-avatar" style="' + cAvStyle + '">' + cAvText + '</div>' +
             '<div class="contact-item-info">' +
                 '<div class="contact-item-name">' + escHtml(c.name) + '</div>' +
                 '<div class="contact-item-addr">' + c.address + '</div>' +
@@ -2134,6 +2245,7 @@ window.removeContact = removeContact;
 window.refreshChats = refreshChats;
 window.filterChatList = filterChatList;
 window.saveProfile = saveProfile;
+window.pickAvatar = pickAvatar;
 window.resetAccount = resetAccount;
 window.adminLookupUser = adminLookupUser;
 window.adminResetUserKey = adminResetUserKey;
