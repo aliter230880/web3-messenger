@@ -353,6 +353,17 @@
                     Развернуть Social Registry
                 </button>
             </div>
+            <div style="margin:4px 0 2px;font-size:11px;color:var(--text-muted);font-weight:600;letter-spacing:.5px;text-transform:uppercase;">Гибридная архитектура (XMTP)</div>
+            <div style="display:flex;gap:8px;margin-bottom:8px;">
+                <button class="btn-admin-action" onclick="deployHybridMessenger()" style="background:linear-gradient(135deg,#10b981,#059669);flex:1;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    Развернуть HybridMessenger
+                </button>
+                <button class="btn-admin-action" onclick="deployIdentityV2()" style="background:linear-gradient(135deg,#6366f1,#4f46e5);flex:1;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    Развернуть IdentityV2
+                </button>
+            </div>
 
             <div class="admin-form-row" style="margin-bottom:8px;">
                 <input type="text" id="escrow-contract-input" class="input-field" placeholder="0x... адрес escrow контракта">
