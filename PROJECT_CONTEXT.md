@@ -52,8 +52,8 @@
 | `SocialWalletRegistry` | `0xC2c66A1eBe0484c8a91c4849680Bcd77ada4E036` | Задеплоен, не интегрирован |
 | `OLD_MESSAGE_CONTRACT` | `0x906DCA5190841d5F0acF8244bd8c176ecb24139D` | Устаревший, авто-миграция |
 | `PublicKeyRegistry` | — | Не задеплоен (байткод готов в app.js) |
-| `IdentityV2` | — | **НУЖЕН ПОВТОРНЫЙ ДЕПЛОЙ** (см. примечание ниже) |
-| `HybridMessenger` | — | Не задеплоен (байткод готов в app.js после фикса) |
+| `IdentityV2` | `0xd7cCe5816429616d92F7B2e8eAeFf20ef2B534FC` | ✅ Задеплоен 30 апр 2026, Polygon Mainnet, 5260 bytes |
+| `HybridMessenger` | `0x67bbFc557D23e2dCEde220d3A9Adce505FB01bF5` | ✅ Задеплоен 30 апр 2026, Polygon Mainnet, 3042 bytes |
 
 > **⚠ Примечание о деплое IdentityV2:**  
 > Первая попытка деплоя (30 апр 2026, tx `0x7c5c06919a8ca2bd8ecf94f8e31b2157c4ce5351e6ed1d01d7f0596a3d5411cd`)  
