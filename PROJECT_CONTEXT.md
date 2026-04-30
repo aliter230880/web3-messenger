@@ -52,6 +52,16 @@
 | `SocialWalletRegistry` | `0xC2c66A1eBe0484c8a91c4849680Bcd77ada4E036` | Задеплоен, не интегрирован |
 | `OLD_MESSAGE_CONTRACT` | `0x906DCA5190841d5F0acF8244bd8c176ecb24139D` | Устаревший, авто-миграция |
 | `PublicKeyRegistry` | — | Не задеплоен (байткод готов в app.js) |
+| `IdentityV2` | — | **НУЖЕН ПОВТОРНЫЙ ДЕПЛОЙ** (см. примечание ниже) |
+| `HybridMessenger` | — | Не задеплоен (байткод готов в app.js после фикса) |
+
+> **⚠ Примечание о деплое IdentityV2:**  
+> Первая попытка деплоя (30 апр 2026, tx `0x7c5c06919a8ca2bd8ecf94f8e31b2157c4ce5351e6ed1d01d7f0596a3d5411cd`)  
+> создала пустой контракт на `0x3c0534C30A00e1b2801dbB64F7a54502A4748A92` (0 bytes bytecode, gasUsed=53000).  
+> **Причина:** `IDENTITY_V2_BYTECODE = ''` — пустая строка в app.js.  
+> **Исправлено:** оба байткода скомпилированы solc 0.8.x и вставлены в app.js (IdentityV2: ~5351 байт, HybridMessenger: ~3137 байт).  
+> **Действие:** задеплоить заново через admin-панель — кнопка «Развернуть IdentityV2».
+
 | `SHARE_BASE_URL` | `https://chat.aliterra.space/` | — |
 
 ---
