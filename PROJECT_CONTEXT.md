@@ -463,10 +463,21 @@ await fetch(`https://api.github.com/repos/aliter230880/web3-messenger/contents/$
 ### HybridMessenger + IdentityV2 (апрель 2026)
 Два новых контракта подготовлены для гибридной XMTP-архитектуры (андроид-версия мессенджера запросила). Скомпилированы solc 0.8.35, байткод встроен в `js/app.js`, кнопки деплоя добавлены в админ-панель (секция «Гибридная архитектура (XMTP)»).
 
-**HybridMessenger** — хранит SHA-256 хэши XMTP-сообщений on-chain для верификации. Адрес после деплоя → `w3m_hybrid_messenger` в localStorage.  
-**IdentityV2** — улучшенный реестр профилей: уникальные никнеймы, 24 аватара (0-23), поиск по никнейму, `adminSetProfile` для миграции. Адрес после деплоя → `w3m_identity_v2` в localStorage.
+**HybridMessenger** — хранит SHA-256 хэши XMTP-сообщений on-chain для верификации. Адрес после деплоя → `w3m_hybrid_messenger` в localStorage. **Статус: НЕ задеплоен** (кнопка в админ-панели готова).  
+**IdentityV2** — улучшенный реестр профилей: уникальные никнеймы, 24 аватара (0-23), поиск по никнейму, `adminSetProfile` для миграции. Адрес после деплоя → `w3m_identity_v2` в localStorage. **Статус: НЕ задеплоен** (кнопка в админ-панели готова).
 
 Исправлены баги исходных контрактов: убран upgradeable proxy pattern (мешал деплою одной кнопкой), добавлена авторизация в `clearOldHashes`, avatarId приведён к 0-23.
+
+**История деплоев admin-кошелька** `0xB19aEe699eb4D2Af380c505E4d6A108b055916eB` (Polygon Mainnet, апрель 2026):
+
+| Дата | Gas | Адрес | Контракт |
+|---|---|---|---|
+| 13 апр 21:12 | 1,011,985 | `0xC2c66A1eBe0484c8a91c4849680Bcd77ada4E036` | SocialWalletRegistry |
+| 13 апр 20:43 | 161,819 | `0xa63cea89fd6054438d64f598c9f0626ffc6b78d1` | предположительно PublicKeyRegistry |
+| 13 апр 19:45 | 732,298 | `0xA07B784e6e1Ca3CA00084448a0b4957005C5ACEb` | MessageStorage |
+| 11 апр 17:24 | 549,785 | `0x075da61ccaac73279ccc49097b8e5fdcf6dd8737` | предположительно KeyEscrow |
+| 11 апр 13:18 | 1,355,634 | `0x906DCA5190841d5F0acF8244bd8c176ecb24139D` | OLD MessageStorage |
+| 3-7 апр | 2-5M | разные | Android AI контракты (upgradeable) |
 
 ### XMTP vs текущий on-chain подход (апрель 2026)
 **XMTP лучше для пользователя:** быстро (без ожидания майнинга), бесплатно (нет gas), battle-tested E2E (стандарт MLS), interoperability с другими dApp.  
