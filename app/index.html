@@ -3,10 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Web2Gram — Открыть в кошельке</title>
+  <title>Web3Gram — Открыть в кошельке</title>
   <meta name="description" content="Decentralized Messenger on Polygon Mainnet">
-  <!-- WalletConnect dApp metadata -->
-  <meta property="og:title" content="Web2Gram">
+  <meta property="og:title" content="Web3Gram">
   <meta property="og:description" content="Decentralized Messenger on Polygon Mainnet">
   <meta property="og:image" content="https://chat.aliterra.space/logo.png">
   <link rel="icon" href="../favicon.png">
@@ -75,9 +74,9 @@
 </head>
 <body>
   <div class="card">
-    <img class="logo" src="../logo.png" alt="Web2Gram">
+    <img class="logo" src="../logo.png" alt="Web3Gram">
     <div class="badge">Polygon Mainnet</div>
-    <h1>Web2Gram</h1>
+    <h1>Web3Gram</h1>
     <p>Откройте приложение в браузере вашего кошелька — там автоматически подключится MetaMask или Trust Wallet</p>
 
     <!-- MetaMask DApp Browser -->
@@ -96,8 +95,8 @@
       <span class="arrow">›</span>
     </a>
 
-    <!-- Trust Wallet DApp Browser -->
-    <a class="btn" href="https://link.trustwallet.com/open_url?coin_id=60&url=https://chat.aliterra.space">
+    <!-- Trust Wallet DApp Browser — Android Intent URI -->
+    <a class="btn" href="intent://browser_enable?url=https%3A%2F%2Fchat.aliterra.space#Intent;scheme=trust;package=com.wallet.crypto.trustapp;S.browser_fallback_url=https%3A%2F%2Ftrustwalletapp.com;end">
       <svg class="btn-icon" viewBox="0 0 40 40" fill="none">
         <rect width="40" height="40" rx="10" fill="#3375BB"/>
         <path d="M20 8l10 4.5v9c0 5.5-4.5 10-10 11-5.5-1-10-5.5-10-11v-9L20 8z" fill="white" fill-opacity=".2"/>
