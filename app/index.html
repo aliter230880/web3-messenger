@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web2Gram — Открыть в кошельке</title>
+  <meta name="description" content="Decentralized Messenger on Polygon Mainnet">
+  <!-- WalletConnect dApp metadata -->
+  <meta property="og:title" content="Web2Gram">
+  <meta property="og:description" content="Decentralized Messenger on Polygon Mainnet">
+  <meta property="og:image" content="https://chat.aliterra.space/logo.png">
+  <link rel="icon" href="../favicon.png">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+      background: #0f0f0f;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      max-width: 400px;
+      width: 100%;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 24px;
+      padding: 40px 32px;
+      text-align: center;
+    }
+    .logo { width: 80px; height: 80px; border-radius: 20px; margin: 0 auto 20px; }
+    h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+    p { color: #888; font-size: 14px; line-height: 1.6; margin-bottom: 32px; }
+    .badge {
+      display: inline-block;
+      background: #8b5cf620;
+      color: #8b5cf6;
+      border: 1px solid #8b5cf640;
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 32px;
+    }
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      width: 100%;
+      padding: 16px 20px;
+      border-radius: 16px;
+      border: 1px solid #2a2a2a;
+      background: #242424;
+      color: #fff;
+      text-decoration: none;
+      font-size: 15px;
+      font-weight: 500;
+      margin-bottom: 12px;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: #2e2e2e; }
+    .btn-icon { width: 36px; height: 36px; border-radius: 10px; }
+    .btn-meta { text-align: left; flex: 1; }
+    .btn-label { font-weight: 600; font-size: 15px; }
+    .btn-sub { font-size: 12px; color: #666; }
+    .arrow { color: #555; font-size: 18px; }
+    .divider { color: #444; font-size: 12px; margin: 20px 0; }
+    .web-link { color: #8b5cf6; font-size: 13px; text-decoration: none; }
+    .web-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img class="logo" src="../logo.png" alt="Web2Gram">
+    <div class="badge">Polygon Mainnet</div>
+    <h1>Web2Gram</h1>
+    <p>Откройте приложение в браузере вашего кошелька — там автоматически подключится MetaMask или Trust Wallet</p>
+
+    <!-- MetaMask DApp Browser -->
+    <a class="btn" href="https://metamask.app.link/dapp/chat.aliterra.space">
+      <svg class="btn-icon" viewBox="0 0 40 40" fill="none">
+        <rect width="40" height="40" rx="10" fill="#f6851b"/>
+        <path d="M33.1 7L21.1 15.8l2.3-5.4L33.1 7z" fill="#fff" opacity=".9"/>
+        <path d="M6.9 7l11.8 8.9-2.1-5.4L6.9 7z" fill="#fff" opacity=".7"/>
+        <path d="M20 26c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8z" fill="#fff" opacity=".3"/>
+        <circle cx="20" cy="20" r="5" fill="#fff"/>
+      </svg>
+      <div class="btn-meta">
+        <div class="btn-label">Открыть в MetaMask</div>
+        <div class="btn-sub">Встроенный DApp браузер</div>
+      </div>
+      <span class="arrow">›</span>
+    </a>
+
+    <!-- Trust Wallet DApp Browser -->
+    <a class="btn" href="https://link.trustwallet.com/open_url?coin_id=60&url=https://chat.aliterra.space">
+      <svg class="btn-icon" viewBox="0 0 40 40" fill="none">
+        <rect width="40" height="40" rx="10" fill="#3375BB"/>
+        <path d="M20 8l10 4.5v9c0 5.5-4.5 10-10 11-5.5-1-10-5.5-10-11v-9L20 8z" fill="white" fill-opacity=".2"/>
+        <path d="M20 10.5l8 3.6v7.4c0 4.4-3.6 8-8 8.8-4.4-.8-8-4.4-8-8.8v-7.4l8-3.6z" fill="white"/>
+        <path d="M16.5 20l2.5 2.5 5-5" stroke="#3375BB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div class="btn-meta">
+        <div class="btn-label">Открыть в Trust Wallet</div>
+        <div class="btn-sub">Встроенный DApp браузер</div>
+      </div>
+      <span class="arrow">›</span>
+    </a>
+
+    <div class="divider">или</div>
+    <a class="web-link" href="https://chat.aliterra.space">Открыть в обычном браузере →</a>
+  </div>
+</body>
+</html>
